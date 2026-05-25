@@ -93,6 +93,66 @@ st.sidebar.dataframe(
     use_container_width=True
 )
 
+with st.expander("Miten luvut on laskettu? (avaa tästä)", expanded=False):
+    st.markdown(
+        """
+### Käytetyt käsitteet
+
+**1) Sijoitus (rank)**  
+- Pienempi rank = parempi. Rank tulee suoraan datasta.
+
+**2) Field size (kilpailun koko)**  
+- Lasketaan per kilpailu:  
+  **field_size = max(rank)** kyseisessä kilpailussa  
+  (eli suurin sijoitusarvo = osallistujien määrä arviolta).
+
+**3) Performance score (0–1)**  
+- Muutetaan sijoitus vertailukelpoiseksi eri kokoisissa kilpailuissa:  
+  **performance_score = 1 − (rank − 1) / (field_size − 1)**  
+  - 1. sija → score = 1  
+  - viimeinen → score = 0  
+  - Jos field_size = 1 (vain yksi), score asetetaan 1.
+
+**4) Avg rank / Best rank**  
+- **avg_rank** = pelaajan rankien keskiarvo (kaikki kisat mukana)  
+- **best_rank** = pelaajan pienin rank (paras sijoitus)
+
+**5) Top 5 -tilastot**  
+- **top5_finishes** = montako kertaa rank ≤ 5  
+- **top5_rate** = top5_finishes / starts  
+- **starts** = montako tulosriviä pelaajalla on (kisoja datassa)
+
+**6) Consistency (tasaisuus)**  
+- Lasketaan suorituspisteiden hajonnasta:  
+  **std_perf = std(performance_score)**  
+  **consistency = 1 − std_perf**  
+  (suurempi = tasaisempi; jos std puuttuu, consistency = 0)
+
+**7) Trend slope (nousujohteisuus / trendi)**  
+- Järjestetään pelaajan kisat kilpailu-ID:n mukaan (proxy ajalle).  
+- Tehdään yksinkertainen lineaarinen trendi `performance_score`:lle:  
+  **trend_slope = slope( performance_score ~ kisaindeksi )**  
+  - positiivinen → keskimäärin nouseva  
+  - negatiivinen → laskeva
+
+**8) Current form (nykykunto)**  
+- **current_form = keskiarvo(performance_score viimeiset 5 kisaa)**  
+  (jos kisoja < 5, käytetään niitä mitä on)
+
+**9) Kokonais-score (järjestysluku top-listoihin)**  
+- Painotettu yhdistelmä:
+  - 45% avg_perf  
+  - 20% top5_rate  
+  - 20% consistency  
+  - 15% trend_slope  
+
+Kaava:
+**score = 0.45·avg_perf + 0.20·top5_rate + 0.20·consistency + 0.15·trend_slope**
+
+> Huom: voit muuttaa painoja, jos haluat korostaa esim. nousua tai top5-osumia.
+        """
+    )
+
 st.title("Pelaajahaku & tilastot")
 
 tab1, tab2, tab3 = st.tabs(["Pelaajahaku", "Top-listat", "Trendit"])
