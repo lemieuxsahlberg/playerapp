@@ -24,13 +24,6 @@ def load_data(path="results.parquet") -> pd.DataFrame:
 
     df["player_norm"] = df["player"].apply(norm_name)
     return df
-    
-st.sidebar.markdown("## Data-info")
-st.sidebar.write("Rivejä:", len(df))
-st.sidebar.write("Kisoja:", df["competition"].nunique())
-st.sidebar.write("Pelaajia:", df["player"].nunique())
-st.sidebar.write("Min ID:", int(df["competition"].min()))
-st.sidebar.write("Max ID:", int(df["competition"].max()))
 
 def add_performance(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
@@ -221,12 +214,6 @@ with tab1:
     st.line_chart(ts.set_index("competition")["performance_score"])
     st.markdown("### Viimeisimmät kisat")
     st.dataframe(ts.tail(30), use_container_width=True)
-
-    st.markdown("### Pikahaku datasta (debug)")
-    dbg = st.text_input("Kirjoita nimi (esim. Kammonen)", "")
-    if dbg:
-    m = df[df["player"].str.contains(dbg, case=False, na=False)].copy()
-    st.dataframe(m[["player","rank","competition"]].sort_values(["competition","rank"]).tail(200), use_container_width=True)
     
 
 with tab2:
