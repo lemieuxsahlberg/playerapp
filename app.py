@@ -209,7 +209,7 @@ with tab1:
     c3.metric("Top5", f"{int(row['top5_finishes'])} ({row['top5_rate']*100:.1f}%)")
     c4.metric("Trendi", f"{row['trend_slope']:+.4f}")
 
-    ts = player_timeseries(df, pn)
+    ts = player_timeseries(df_filtered, pn)
     st.markdown("### Trendikäyrä (performance_score, parempi = ylempänä)")
     st.line_chart(ts.set_index("competition")["performance_score"])
     st.markdown("### Viimeisimmät kisat")
@@ -245,7 +245,7 @@ with tab3:
     selected = st.multiselect("Valitse pelaajat", options=options, default=options[:2])
 
     if selected:
-        dfp = add_performance(df)
+        dfp = add_performance(df_filtered)
         dfp["player_norm"] = dfp["player"].apply(norm_name)
 
         chart_df = []
