@@ -149,7 +149,7 @@ with st.expander("Miten luvut on laskettu? (avaa tästä)", expanded=False):
 Kaava:
 **score = 0.45·avg_perf + 0.20·top5_rate + 0.20·consistency + 0.15·trend_slope**
 
-> Huom: voit muuttaa painoja, jos haluat korostaa esim. nousua tai top5-osumia.
+> .
         """
     )
 
