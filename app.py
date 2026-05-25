@@ -83,7 +83,35 @@ def player_timeseries(df: pd.DataFrame, player_norm: str) -> pd.DataFrame:
 
 # ---------- App ----------
 df = load_data()
-players_table = compute_player_table(df)
+
+# --- FILTER: competition id väli ---
+st.sidebar.markdown("## Suodatus: kilpailu-ID väli")
+
+comp_series = df["competition"].dropna()
+if comp_series.empty:
+    st.sidebar.warning("Competition-saraketta ei löytynyt / se on tyhjä.")
+    df_filtered = df.copy()
+else:
+    min_default = int(comp_series.min())
+    max_default = int(comp_series.max())
+
+    min_id = st.sidebar.number_input("Min kilpailu-ID", value=min_default, step=1)
+    max_id = st.sidebar.number_input("Max kilpailu-ID", value=max_default, step=1)
+
+    if min_id > max_id:
+        st.sidebar.error("Min ei voi olla suurempi kuin Max.")
+        df_filtered = df.iloc[0:0].copy()  # tyhjä
+    else:
+        df_filtered = df[df["competition"].between(int(min_id), int(max_id))].copy()
+
+st.sidebar.caption(f"Käytössä: {len(df_filtered)} riviä")
+
+# Jos suodatus tyhjentää datan
+if df_filtered.empty:
+    st.error("Tällä kilpailu-ID -välillä ei löytynyt dataa. Kokeile toista väliä.")
+    st.stop()
+
+players_table = compute_player_table(df_filtered)
 
 # Sidebar: Top 5 always visible
 st.sidebar.markdown("## Top 5 (eniten top5-sijoituksia)")
