@@ -118,22 +118,27 @@ st.title("Pelaajahaku & tilastot")
 st.markdown("## Valitse kisat")
 
 range_choice = st.selectbox(
-    "Kilpailu-ID:t",
+    "Kisarajaus",
     [
-        "Oikeat kisat (2401-2449, 2501-2550, 2601-2622)",
-        "Kaikki 1001-2622",
-        "Mukautettu"
+        "Kaikki datassa olevat kilpailut",
+        "Mukautettu kilpailu-ID-väli"
     ]
 )
 
-if range_choice == "Oikeat kisat (2401-2449, 2501-2550, 2601-2622)":
-    range_text = "2401-2449,2501-2550,2601-2622"
-elif range_choice == "Kaikki 1001-2622":
-    range_text = "1001-2622"
+if range_choice == "Kaikki datassa olevat kilpailut":
+    df_filtered = df.copy()
+    range_text = None
 else:
     range_text = st.text_input(
         "Kirjoita kilpailu-ID-välit",
         value="2401-2449,2501-2550,2601-2622"
+    )
+    wanted_ids = parse_range_text(range_text)
+    df_filtered = df[df["competition"].isin(wanted_ids)].copy()
+
+if df_filtered.empty:
+    st.error("Tällä kisarajauksella ei löytynyt dataa.")
+    st.stop()
     )
 
 wanted_ids = parse_range_text(range_text)
