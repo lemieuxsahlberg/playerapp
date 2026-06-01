@@ -127,7 +127,7 @@ range_choice = st.selectbox(
 
 if range_choice == "Kaikki datassa olevat kilpailut":
     df_filtered = df.copy()
-    range_text = None
+    wanted_ids = sorted(df_filtered["competition"].dropna().astype(int).unique().tolist())
 else:
     range_text = st.text_input(
         "Kirjoita kilpailu-ID-välit",
@@ -139,6 +139,7 @@ else:
 if df_filtered.empty:
     st.error("Tällä kisarajauksella ei löytynyt dataa.")
     st.stop()
+    
 
 wanted_ids = parse_range_text(range_text)
 df_filtered = df[df["competition"].isin(wanted_ids)].copy()
