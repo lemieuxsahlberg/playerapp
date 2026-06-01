@@ -103,7 +103,7 @@ def year_from_competition(comp):
         return None
 
 @st.cache_data
-def load_data(path="results.parquet", version="v7") -> pd.DataFrame:
+def load_data(path="results.parquet", version="v8") -> pd.DataFrame:
     df = pd.read_parquet(path).copy()
 
     df["rank"] = pd.to_numeric(df["rank"], errors="coerce")
@@ -118,11 +118,17 @@ def load_data(path="results.parquet", version="v7") -> pd.DataFrame:
     else:
         df["competition"] = np.nan
 
+    # Siivotaan pelaajanimet
+    df["player"] = df["player"].astype(str).str.strip()
+    df = df[df["player"].notna()].copy()
+    df = df[df["player"] != ""].copy()
+    df = df[df["player"].str.lower() != "nan"].copy()
+    df = df[~df["player"].isin(["-", "--", "None", "null"])].copy()
+
     df["player_norm"] = df["player"].apply(norm_name)
     df["year"] = df["competition"].apply(year_from_competition)
 
     return df
-
 def add_performance(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
 
