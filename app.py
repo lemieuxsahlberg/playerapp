@@ -455,6 +455,6 @@ if LANG == "Suomi":
 else:
     st.markdown(
         "© 2026 [Your name / organisation]. All rights reserved."
-    )
+    ))
 
     
