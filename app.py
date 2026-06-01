@@ -3,15 +3,105 @@ import pandas as pd
 import numpy as np
 import unicodedata
 
-st.set_page_config(page_title="Pelaajahaku & tilastot", layout="wide")
+st.set_page_config(page_title="Pelaajahaku / Player Stats", layout="wide")
+
+# ---------- Basic styling ----------
+st.markdown("""
+<style>
+.block-container {
+    padding-top: 2rem;
+    padding-bottom: 2rem;
+    max-width: 1200px;
+}
+.metric-card {
+    background-color: #f8f9fb;
+    border: 1px solid #e8ebf0;
+    border-radius: 14px;
+    padding: 16px 18px;
+    margin-bottom: 8px;
+}
+.metric-label {
+    font-size: 0.9rem;
+    color: #666;
+    margin-bottom: 4px;
+}
+.metric-value {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #111;
+}
+.section-title {
+    margin-top: 1.2rem;
+    margin-bottom: 0.6rem;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ---------- Translations ----------
+LANG = st.radio("Kieli / Language", ["Suomi", "English"], horizontal=True)
+
+TEXT = {
+    "app_title": {"Suomi": "Pelaajahaku & tilastot", "English": "Player Search & Statistics"},
+    "overview": {"Suomi": "Yleiskatsaus", "English": "Overview"},
+    "player_search": {"Suomi": "Pelaajahaku", "English": "Player Search"},
+    "rankings": {"Suomi": "Top-listat", "English": "Rankings"},
+    "trends": {"Suomi": "Trendit", "English": "Trends"},
+    "calculations": {"Suomi": "Miten luvut on laskettu?", "English": "How are the numbers calculated?"},
+    "players": {"Suomi": "Pelaajia", "English": "Players"},
+    "competitions": {"Suomi": "Kilpailuja", "English": "Competitions"},
+    "rows": {"Suomi": "Tulosrivejä", "English": "Result rows"},
+    "avg_field": {"Suomi": "Keskim. kilpailun koko", "English": "Avg field size"},
+    "top5_now": {"Suomi": "Top 5 (eniten top5-sijoituksia)", "English": "Top 5 (most top-5 finishes)"},
+    "competitions_by_year": {"Suomi": "Kilpailut vuosittain", "English": "Competitions by year"},
+    "overall_trend": {"Suomi": "Yleinen kehitys kilpailuittain", "English": "Overall progression by competition"},
+    "name_filter": {"Suomi": "Suodata nimeä", "English": "Filter name"},
+    "select_player": {"Suomi": "Valitse pelaaja", "English": "Select player"},
+    "best_rank": {"Suomi": "Paras sijoitus", "English": "Best rank"},
+    "avg_rank": {"Suomi": "Keskisijoitus", "English": "Average rank"},
+    "top5": {"Suomi": "Top 5", "English": "Top 5"},
+    "consistency": {"Suomi": "Konsistenssi", "English": "Consistency"},
+    "trend": {"Suomi": "Trendi", "English": "Trend"},
+    "current_form": {"Suomi": "Nykykunto", "English": "Current form"},
+    "player_trend": {"Suomi": "Pelaajan trendikäyrä", "English": "Player trend chart"},
+    "recent_results": {"Suomi": "Viimeisimmät kilpailut", "English": "Most recent competitions"},
+    "year_distribution": {"Suomi": "Kisat vuosittain", "English": "Competitions by year"},
+    "most_top5": {"Suomi": "Eniten top5-sijoituksia", "English": "Most top-5 finishes"},
+    "best_avg_perf": {"Suomi": "Paras keskimääräinen suoritus", "English": "Best average performance"},
+    "most_improving": {"Suomi": "Nousujohteisimmat", "English": "Most improving"},
+    "select_players": {"Suomi": "Valitse pelaajat", "English": "Select players"},
+    "comparison_trends": {"Suomi": "Vertailutrendit", "English": "Comparison trends"},
+    "data_info": {"Suomi": "Datan yhteenveto", "English": "Data summary"},
+    "year_2024": {"Suomi": "Vuosi 2024", "English": "Year 2024"},
+    "year_2025": {"Suomi": "Vuosi 2025", "English": "Year 2025"},
+    "year_2026": {"Suomi": "Vuosi 2026", "English": "Year 2026"},
+    "empty": {"Suomi": "Dataa ei löytynyt.", "English": "No data found."},
+}
+
+def t(key):
+    return TEXT[key][LANG]
 
 # ---------- Utils ----------
 def norm_name(s: str) -> str:
     s = unicodedata.normalize("NFKD", str(s)).encode("ascii", "ignore").decode()
     return s.lower().strip()
 
+def year_from_competition(comp):
+    try:
+        comp = int(comp)
+        prefix = str(comp)[:2]
+        if prefix == "24":
+            return 2024
+        elif prefix == "25":
+            return 2025
+        elif prefix == "26":
+            return 2026
+        else:
+            return None
+    except Exception:
+        return None
+
 @st.cache_data
-def load_data(path="results.parquet", version="v4") -> pd.DataFrame:
+def load_data(path="results.parquet", version="v6") -> pd.DataFrame:
     df = pd.read_parquet(path).copy()
     df["rank"] = pd.to_numeric(df["rank"], errors="coerce")
 
@@ -26,22 +116,9 @@ def load_data(path="results.parquet", version="v4") -> pd.DataFrame:
         df["competition"] = np.nan
 
     df["player_norm"] = df["player"].apply(norm_name)
-    return df
+    df["year"] = df["competition"].apply(year_from_competition)
 
-def parse_range_text(range_text: str):
-    ids = []
-    parts = [p.strip() for p in range_text.split(",") if p.strip()]
-    for part in parts:
-        if "-" in part:
-            a, b = part.split("-", 1)
-            a = int(a.strip())
-            b = int(b.strip())
-            if a > b:
-                a, b = b, a
-            ids.extend(range(a, b + 1))
-        else:
-            ids.append(int(part))
-    return sorted(set(ids))
+    return df
 
 def add_performance(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
@@ -94,6 +171,18 @@ def compute_player_table(df: pd.DataFrame) -> pd.DataFrame:
     trend_df = pd.DataFrame(trends, columns=["player_norm", "trend_slope", "current_form"])
     out = agg.merge(base, on="player_norm", how="left").merge(trend_df, on="player_norm", how="left")
 
+    # yearly starts
+    yearly = (
+        dfp.groupby(["player_norm", "year"])["competition"]
+        .nunique()
+        .reset_index(name="starts_year")
+    )
+
+    ypivot = yearly.pivot(index="player_norm", columns="year", values="starts_year").fillna(0).reset_index()
+    ypivot.columns = [f"starts_{int(c)}" if isinstance(c, (int, float)) and not pd.isna(c) else c for c in ypivot.columns]
+
+    out = out.merge(ypivot, on="player_norm", how="left")
+
     out["score"] = (
         0.45 * out["avg_perf"] +
         0.20 * out["top5_rate"] +
@@ -106,88 +195,104 @@ def compute_player_table(df: pd.DataFrame) -> pd.DataFrame:
 def player_timeseries(df: pd.DataFrame, player_norm: str) -> pd.DataFrame:
     dfp = add_performance(df)
     sub = dfp[dfp["player_norm"] == player_norm].sort_values("competition")
-    return sub[["competition", "rank", "performance_score"]]
+    return sub[["competition", "rank", "performance_score", "year"]]
+
+def metric_card(label, value):
+    return f"""
+    <div class="metric-card">
+        <div class="metric-label">{label}</div>
+        <div class="metric-value">{value}</div>
+    </div>
+    """
 
 # ---------- Load ----------
 df = load_data()
 
+# Optional exclusion list if needed later:
+exclude_ids = []
+if exclude_ids:
+    df = df[~df["competition"].isin(exclude_ids)].copy()
+
+if df.empty:
+    st.error(t("empty"))
+    st.stop()
+
+players_table = compute_player_table(df)
+df_perf = add_performance(df)
+
 # ---------- Page ----------
-st.title("Pelaajahaku & tilastot")
+st.title(t("app_title"))
 
-# --- Kisarajaus ---
-st.markdown("## Valitse kisat")
+tabs = st.tabs([
+    t("overview"),
+    t("player_search"),
+    t("rankings"),
+    t("trends"),
+    t("calculations")
+])
 
-range_choice = st.selectbox(
-    "Kisarajaus",
-    [
-        "Kaikki datassa olevat kilpailut",
-        "Mukautettu kilpailu-ID-väli"
-    ]
-)
+# ---------- Overview ----------
+with tabs[0]:
+    st.markdown(f"## {t('overview')}")
 
-if range_choice == "Kaikki datassa olevat kilpailut":
-    df_filtered = df.copy()
-    wanted_ids = sorted(df_filtered["competition"].dropna().astype(int).unique().tolist())
-else:
-    range_text = st.text_input(
-        "Kirjoita kilpailu-ID-välit",
-        value="2401-2449,2501-2550,2601-2622"
+    total_players = df["player"].nunique()
+    total_competitions = df["competition"].nunique()
+    total_rows = len(df)
+    avg_field_size = round(df_perf.groupby("competition")["rank"].max().mean(), 1)
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        st.markdown(metric_card(t("players"), total_players), unsafe_allow_html=True)
+    with c2:
+        st.markdown(metric_card(t("competitions"), total_competitions), unsafe_allow_html=True)
+    with c3:
+        st.markdown(metric_card(t("rows"), total_rows), unsafe_allow_html=True)
+    with c4:
+        st.markdown(metric_card(t("avg_field"), avg_field_size), unsafe_allow_html=True)
+
+    st.markdown(f"### {t('top5_now')}")
+    top5_board = players_table.sort_values(["top5_finishes", "top5_rate"], ascending=False).head(5)
+    st.dataframe(
+        top5_board[["player", "top5_finishes", "top5_rate", "best_rank", "tournaments"]],
+        use_container_width=True
     )
-    wanted_ids = parse_range_text(range_text)
-    df_filtered = df[df["competition"].isin(wanted_ids)].copy()
 
-if df_filtered.empty:
-    st.error("Tällä kisarajauksella ei löytynyt dataa.")
-    st.stop()
-    
+    c1, c2 = st.columns(2)
 
-wanted_ids = parse_range_text(range_text)
-df_filtered = df[df["competition"].isin(wanted_ids)].copy()
+    with c1:
+        st.markdown(f"### {t('competitions_by_year')}")
+        year_counts = (
+            df.dropna(subset=["year"])
+            .groupby("year")["competition"]
+            .nunique()
+            .sort_index()
+        )
+        st.bar_chart(year_counts)
 
-if df_filtered.empty:
-    st.error("Tällä kisarajauksella ei löytynyt dataa.")
-    st.stop()
+    with c2:
+        st.markdown(f"### {t('overall_trend')}")
+        overall_trend = (
+            df_perf.groupby("competition")["performance_score"]
+            .mean()
+            .sort_index()
+        )
+        st.line_chart(overall_trend)
 
-players_table = compute_player_table(df_filtered)
+    st.markdown(f"### {t('data_info')}")
+    year_info = (
+        df.groupby("year")["competition"]
+        .nunique()
+        .rename("competitions")
+        .reset_index()
+        .sort_values("year")
+    )
+    st.dataframe(year_info, use_container_width=True)
 
-st.caption(
-    f"Käytössä kilpailut: {min(wanted_ids)}–{max(wanted_ids)} | "
-    f"kisoja mukana: {df_filtered['competition'].nunique()} | "
-    f"rivejä: {len(df_filtered)} | "
-    f"pelaajia: {df_filtered['player'].nunique()}"
-)
+# ---------- Player search ----------
+with tabs[1]:
+    st.markdown(f"## {t('player_search')}")
 
-# --- Top 5 heti näkyviin ---
-st.markdown("## Top 5 (eniten top5-sijoituksia)")
-top5_board = players_table.sort_values(
-    ["top5_finishes", "top5_rate"], ascending=False
-).head(5)
-
-st.dataframe(
-    top5_board[["player", "top5_finishes", "top5_rate", "best_rank", "tournaments"]],
-    use_container_width=True
-)
-
-# --- Selite ---
-with st.expander("Miten luvut on laskettu?"):
-    st.markdown("""
-- **best_rank** = paras sijoitus (pienin rank)
-- **avg_rank** = sijoitusten keskiarvo
-- **top5_finishes** = montako kertaa rank ≤ 5
-- **top5_rate** = top5_finishes / starts
-- **performance_score** = 1 − (rank−1)/(field_size−1)
-- **trend_slope** = lineaarinen trendi performance_scorelle
-- **current_form** = viimeisten 5 kilpailun performance_score-keskiarvo
-- **score** = painotettu yhdistelmä avg_perf, top5_rate, consistency, trend_slope
-""")
-
-# --- Tabit ---
-tab1, tab2, tab3 = st.tabs(["Pelaajahaku", "Top-listat", "Trendit"])
-
-with tab1:
-    st.subheader("Pelaajahaku")
-
-    q = st.text_input("Suodata nimeä", "")
+    q = st.text_input(t("name_filter"), "")
     if q:
         qn = norm_name(q)
         options = players_table[
@@ -195,75 +300,139 @@ with tab1:
         ]["player"].tolist()
         if not options:
             options = players_table["player"].tolist()
-            st.info("Ei osumia — näytetään koko lista.")
+            st.info("Ei osumia / No matches — showing full list.")
     else:
         options = players_table["player"].tolist()
 
-    chosen = st.selectbox("Valitse pelaaja", options=options, index=0)
+    chosen = st.selectbox(t("select_player"), options=options, index=0)
     pn = norm_name(chosen)
     row = players_table[players_table["player_norm"] == pn].iloc[0]
 
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Best rank", int(row["best_rank"]))
-    c2.metric("Avg rank", f"{row['avg_rank']:.2f}")
-    c3.metric("Top5", f"{int(row['top5_finishes'])} ({row['top5_rate']*100:.1f}%)")
-    c4.metric("Trendi", f"{row['trend_slope']:+.4f}")
+    c1, c2, c3 = st.columns(3)
+    c4, c5, c6 = st.columns(3)
 
-    ts = player_timeseries(df_filtered, pn)
+    with c1:
+        st.markdown(metric_card(t("best_rank"), int(row["best_rank"])), unsafe_allow_html=True)
+    with c2:
+        st.markdown(metric_card(t("avg_rank"), f"{row['avg_rank']:.2f}"), unsafe_allow_html=True)
+    with c3:
+        st.markdown(metric_card(t("top5"), f"{int(row['top5_finishes'])} ({row['top5_rate']*100:.1f}%)"), unsafe_allow_html=True)
+    with c4:
+        st.markdown(metric_card(t("consistency"), f"{row['consistency']:.3f}"), unsafe_allow_html=True)
+    with c5:
+        st.markdown(metric_card(t("trend"), f"{row['trend_slope']:+.4f}"), unsafe_allow_html=True)
+    with c6:
+        st.markdown(metric_card(t("current_form"), f"{row['current_form']:.3f}"), unsafe_allow_html=True)
 
-    st.markdown("### Trendikäyrä (performance_score)")
+    st.markdown(f"### {t('player_trend')}")
+    ts = player_timeseries(df, pn)
     st.line_chart(ts.set_index("competition")["performance_score"])
 
-    st.markdown("### Viimeisimmät kilpailut")
-    st.dataframe(ts.tail(30), use_container_width=True)
+    c1, c2 = st.columns(2)
 
-with tab2:
-    st.subheader("Top-listat")
+    with c1:
+        st.markdown(f"### {t('year_distribution')}")
+        player_years = (
+            ts.dropna(subset=["year"])
+            .groupby("year")["competition"]
+            .nunique()
+            .sort_index()
+        )
+        st.bar_chart(player_years)
 
-    st.markdown("### Eniten top5-sijoituksia")
+    with c2:
+        st.markdown(f"### {t('recent_results')}")
+        st.dataframe(ts.tail(20), use_container_width=True)
+
+# ---------- Rankings ----------
+with tabs[2]:
+    st.markdown(f"## {t('rankings')}")
+
+    st.markdown(f"### {t('most_top5')}")
     st.dataframe(
         players_table.sort_values("top5_finishes", ascending=False)[
-            ["player", "top5_finishes", "top5_rate", "tournaments", "best_rank"]
+            ["player", "top5_finishes", "top5_rate", "tournaments", "best_rank", "consistency"]
         ].head(50),
         use_container_width=True
     )
 
-    st.markdown("### Nousujohteisin")
-    st.dataframe(
-        players_table.sort_values("trend_slope", ascending=False)[
-            ["player", "trend_slope", "current_form", "tournaments", "top5_rate"]
-        ].head(50),
-        use_container_width=True
-    )
-
-    st.markdown("### Paras keskimääräinen suoritus")
+    st.markdown(f"### {t('best_avg_perf')}")
     st.dataframe(
         players_table.sort_values("avg_perf", ascending=False)[
-            ["player", "avg_perf", "best_rank", "top5_rate", "tournaments"]
+            ["player", "avg_perf", "best_rank", "avg_rank", "top5_rate", "consistency"]
         ].head(50),
         use_container_width=True
     )
 
-with tab3:
-    st.subheader("Trendit")
+    st.markdown(f"### {t('most_improving')}")
+    st.dataframe(
+        players_table.sort_values("trend_slope", ascending=False)[
+            ["player", "trend_slope", "current_form", "top5_rate", "consistency", "tournaments"]
+        ].head(50),
+        use_container_width=True
+    )
+
+# ---------- Trends ----------
+with tabs[3]:
+    st.markdown(f"## {t('comparison_trends')}")
 
     options = players_table["player"].tolist()
-    selected = st.multiselect("Valitse pelaajat", options=options, default=options[:2])
+    selected = st.multiselect(t("select_players"), options=options, default=options[:2])
 
     if selected:
-        dfp = add_performance(df_filtered)
-        dfp["player_norm"] = dfp["player"].apply(norm_name)
-
         chart_df = []
         for p in selected:
             pn = norm_name(p)
-            sub = dfp[dfp["player_norm"] == pn].sort_values("competition")[
-                ["competition", "performance_score"]
-            ].copy()
+            sub = df_perf[df_perf["player_norm"] == pn].sort_values("competition")[["competition", "performance_score"]].copy()
             sub["player"] = p
             chart_df.append(sub)
 
-        chart_df = pd.concat(chart_df, ignore_index=True)
-        pivot = chart_df.pivot(index="competition", columns="player", values="performance_score").sort_index()
+        if chart_df:
+            chart_df = pd.concat(chart_df, ignore_index=True)
+            pivot = chart_df.pivot(index="competition", columns="player", values="performance_score").sort_index()
+            st.line_chart(pivot)
 
-        st.line_chart(pivot)
+# ---------- Calculations ----------
+with tabs[4]:
+    st.markdown(f"## {t('calculations')}")
+
+    if LANG == "Suomi":
+        st.markdown("""
+- **Paras sijoitus (best_rank)** = pienin rank  
+- **Keskisijoitus (avg_rank)** = sijoitusten keskiarvo  
+- **Top5** = montako kertaa rank ≤ 5  
+- **Top5-osuus (top5_rate)** = top5 / starts  
+- **Performance score** = `1 − (rank−1)/(field_size−1)`  
+- **Konsistenssi (consistency)** = `1 − std(performance_score)`  
+- **Trendi (trend_slope)** = lineaarinen trendi performance_scorelle  
+- **Nykykunto (current_form)** = viimeisten 5 kilpailun performance_score-keskiarvo  
+- **Vuosi** päätellään kilpailu-ID:n kahdesta ensimmäisestä numerosta:  
+  - `24...` = 2024  
+  - `25...` = 2025  
+  - `26...` = 2026  
+- **Yhteispiste (score)** = painotettu yhdistelmä:
+  - 45% avg_perf
+  - 20% top5_rate
+  - 20% consistency
+  - 15% trend_slope
+        """)
+    else:
+        st.markdown("""
+- **Best rank** = the lowest rank  
+- **Average rank** = mean of all ranks  
+- **Top 5** = number of times rank ≤ 5  
+- **Top 5 rate** = top5 / starts  
+- **Performance score** = `1 − (rank−1)/(field_size−1)`  
+- **Consistency** = `1 − std(performance_score)`  
+- **Trend** = linear slope of performance_score over time  
+- **Current form** = mean performance_score of the last 5 competitions  
+- **Year** is inferred from the first two digits of competition ID:  
+  - `24...` = 2024  
+  - `25...` = 2025  
+  - `26...` = 2026  
+- **Overall score** = weighted combination:
+  - 45% avg_perf
+  - 20% top5_rate
+  - 20% consistency
+  - 15% trend_slope
+        """)
