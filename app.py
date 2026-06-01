@@ -453,8 +453,8 @@ with tabs[4]:
 st.markdown("---")
 
 if LANG == "Suomi":
-    st.markdown("© 2026 – Kaikki oikeudet pidätetään.")
+    st.markdown("© 2026 Sahlberg G. – Kaikki oikeudet pidätetään.")
 else:
-    st.markdown("© 2026 – All rights reserved.")
+    st.markdown("© 2026 Sahlberg G. – All rights reserved.")
 
     
