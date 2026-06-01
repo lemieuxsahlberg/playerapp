@@ -401,11 +401,13 @@ with tabs[3]:
             st.line_chart(pivot)
 
 # ---------- Calculations ----------
+
 with tabs[4]:
     st.markdown(f"## {t('calculation')}")
 
     if LANG == "Suomi":
-        st.markdown("""
+        st.markdown(
+            """
 - **Paras sijoitus** = pienin rank  
 - **Sijoituskeskiarvo** = sijoitusten keskiarvo  
 - **Top 5** = montako kertaa rank ≤ 5  
@@ -423,9 +425,11 @@ with tabs[4]:
   - 20 % top5_rate
   - 20 % consistency
   - 15 % trend_slope
-        """)
+            """
+        )
     else:
-        st.markdown(""
+        st.markdown(
+            """
 - **Best rank** = lowest rank  
 - **Average rank** = mean rank  
 - **Top 5** = number of times rank ≤ 5  
@@ -443,18 +447,14 @@ with tabs[4]:
   - 20% top5_rate
   - 20% consistency
   - 15% trend_slope
-        """
-
+            """
+        )
 
 st.markdown("---")
 
 if LANG == "Suomi":
-    st.markdown(
-        "© 2026 [Sinun nimi / organisaatio]. Kaikki oikeudet pidätetään."
-    )
+    st.markdown("© 2026 – Kaikki oikeudet pidätetään.")
 else:
-    st.markdown(
-        "© 2026 [Your name / organisation]. All rights reserved."
-    ))
+    st.markdown("© 2026 – All rights reserved.")
 
     
