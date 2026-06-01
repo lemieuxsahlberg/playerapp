@@ -425,7 +425,7 @@ with tabs[4]:
   - 15 % trend_slope
         """)
     else:
-        st.markdown("""
+        st.markdown(""
 - **Best rank** = lowest rank  
 - **Average rank** = mean rank  
 - **Top 5** = number of times rank ≤ 5  
