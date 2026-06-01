@@ -443,4 +443,18 @@ with tabs[4]:
   - 20% top5_rate
   - 20% consistency
   - 15% trend_slope
-        """)
+        """
+
+
+st.markdown("---")
+
+if LANG == "Suomi":
+    st.markdown(
+        "© 2026 [Sinun nimi / organisaatio]. Kaikki oikeudet pidätetään."
+    )
+else:
+    st.markdown(
+        "© 2026 [Your name / organisation]. All rights reserved."
+    )
+
+    ))
