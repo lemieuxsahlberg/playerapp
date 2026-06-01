@@ -139,7 +139,6 @@ else:
 if df_filtered.empty:
     st.error("Tällä kisarajauksella ei löytynyt dataa.")
     st.stop()
-    )
 
 wanted_ids = parse_range_text(range_text)
 df_filtered = df[df["competition"].isin(wanted_ids)].copy()
