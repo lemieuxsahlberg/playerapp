@@ -530,7 +530,7 @@ with tabs[0]:
         )
 
     with c2:
-        with c2:
+        
         st.markdown(f"#### {t('recent_improvers')}")
         trend_home = players_table.sort_values("last3_trend", ascending=False).head(3)
         st.dataframe(
