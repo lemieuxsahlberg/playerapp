@@ -319,7 +319,7 @@ def compute_player_table(df: pd.DataFrame) -> pd.DataFrame:
     )
 
     return out.sort_values("score", ascending=False)
-``
+
     dfp = add_performance(df)
 
     # Top 5
