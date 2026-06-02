@@ -86,7 +86,7 @@ TEXT = {
     "most_top5": {"Suomi": "Eniten Top 5 -sijoituksia", "English": "Most Top 5 finishes"},
     "best_avg_rank": {"Suomi": "Paras sijoituskeskiarvo", "English": "Best average rank"},
     "most_active": {"Suomi": "Eniten kilpailuja", "English": "Most competitions"},
-    "long_term_dev": {"Suomi": "Pitkän aikavälin kehitys", "English": "Long-term development"},
+    "long_term_dev": {"Suomi": "Kehitys", "English": "Long-term development"},
     "search_players": {"Suomi": "Hae pelaajaa listasta", "English": "Search player in list"},
 
     "select_players": {"Suomi": "Valitse pelaajat", "English": "Select players"},
