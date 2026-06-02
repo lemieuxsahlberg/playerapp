@@ -2,9 +2,11 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import unicodedata
-import re
 
-st.set_page_config(page_title="Pelaajahaku / Player Stats", layout="wide")
+st.set_page_config(
+    page_title="Pelaajahaku / Player Stats",
+    layout="wide"
+)
 
 # ---------- Styling ----------
 st.markdown("""
@@ -47,6 +49,10 @@ st.markdown("""
     font-size: 1.2rem;
     font-weight: 700;
 }
+.small-note {
+    color: #666;
+    font-size: 0.9rem;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -87,7 +93,10 @@ TEXT = {
     "comparison_trends": {"Suomi": "Vertailutrendit", "English": "Comparison trends"},
     "no_data": {"Suomi": "Dataa ei löytynyt.", "English": "No data found."},
     "no_matches": {"Suomi": "Ei osumia — näytetään koko lista.", "English": "No matches — showing full list."},
-    "footer": {"Suomi": "© 2026 Greta Sahlberg – Kaikki oikeudet pidätetään.", "English": "© 2026 Greta Sahlberg – All rights reserved."},
+    "footer": {
+        "Suomi": "© 2026 Greta Sahlberg – Kaikki oikeudet pidätetään.",
+        "English": "© 2026 Greta Sahlberg – All rights reserved."
+    },
     "top_player_now": {"Suomi": "Top-pelaaja nyt", "English": "Top player right now"},
     "hot_player": {"Suomi": "Kuumin pelaaja", "English": "Hottest player"},
     "best_avg_rank_card": {"Suomi": "Paras sijoituskeskiarvo", "English": "Best average rank"},
@@ -117,12 +126,13 @@ def score_color(value, metric_type="high"):
 
     if metric_type == "high":
         if value >= 0.80:
-            return "#2563eb"  # sininen = superhyvä
+            return "#2563eb"  # superhyvä = sininen
         elif value >= 0.60:
-            return "#16a34a"  # vihreä = hyvä
+            return "#16a34a"  # hyvä = vihreä
         else:
-            return "#dc2626"  # punainen = huono
+            return "#dc2626"  # huono = punainen
     else:
+        # pienempi on parempi
         if value <= 5:
             return "#2563eb"
         elif value <= 12:
@@ -147,13 +157,8 @@ def highlight_metric_card(label, value_html, color):
     """
 
 @st.cache_data
-def load_data(path="results.parquet", version="v11") -> pd.DataFrame:
+def load_data(path="results.parquet", version="v12") -> pd.DataFrame:
     df = pd.read_parquet(path).copy()
-
-    # Poissuljettavat pelaajat
-    exclude_players = ["ERIK HJALMARSSON"]
-
-    df = df[~df["player"].str.upper().isin(exclude_players)].copy()
 
     df["rank"] = pd.to_numeric(df["rank"], errors="coerce")
 
@@ -167,26 +172,29 @@ def load_data(path="results.parquet", version="v11") -> pd.DataFrame:
     else:
         df["competition"] = np.nan
 
-    # Siivotaan tyhjät nimet ja kilpailunimet pois
+    # Siivotaan nimet
     df["player"] = df["player"].astype(str).str.strip()
     df = df[df["player"].notna()].copy()
     df = df[df["player"] != ""].copy()
     df = df[df["player"].str.lower() != "nan"].copy()
     df = df[~df["player"].isin(["-", "--", "None", "null"])].copy()
 
-    # Poistetaan todennäköiset kilpailu/otsikkorivit
+    # Poistetaan todennäköiset kilpailu-/otsikkorivit
     bad_pattern = (
         r"all players|osakilpailu|masters|rahola|kirjurinluoto|updated:|teams|"
         r"general|class|qualification|matchplay|finnish adventure golf masters"
     )
     df = df[~df["player"].str.contains(bad_pattern, case=False, na=False)].copy()
 
-    # Poistetaan nimet joissa ei ole kirjaimia
+    # Poistetaan rivit joissa ei ole kirjaimia
     df = df[df["player"].str.contains(r"[A-Za-zÅÄÖåäö]", regex=True, na=False)].copy()
 
+    # Poistetaan Erik Hjalmarsson
+    excluded_norms = {"erik hjalmarsson"}
     df["player_norm"] = df["player"].apply(norm_name)
-    df["year"] = df["competition"].apply(year_from_competition)
+    df = df[~df["player_norm"].isin(excluded_norms)].copy()
 
+    df["year"] = df["competition"].apply(year_from_competition)
     return df
 
 def add_performance(df: pd.DataFrame) -> pd.DataFrame:
@@ -250,7 +258,7 @@ def compute_player_table(df: pd.DataFrame) -> pd.DataFrame:
 
         current_form = float(np.mean(y[-5:])) if len(y) else np.nan
 
-        # viimeiset 3 kilpailua = "kuumin"
+        # viimeiset 3 kilpailua = kuumin
         if len(y) >= 3:
             last3 = y[-3:]
             x3 = np.arange(len(last3))
@@ -300,15 +308,7 @@ def player_timeseries(df: pd.DataFrame, player_norm: str) -> pd.DataFrame:
 # ---------- Load ----------
 df = load_data()
 
-# Poissuljettavat pelaajat
-exclude_players = ["erik hjalmarsson"]
-df = df[~df["player"].apply(norm_name).isin(exclude_players)].copy()
-
-exclude_ids = []
-if exclude_ids:
-    df = df[~df["competition"].isin(exclude_ids)].copy()
-
-
+# Jos haluat joskus sulkea kilpailuja pois
 exclude_ids = []
 if exclude_ids:
     df = df[~df["competition"].isin(exclude_ids)].copy()
@@ -443,13 +443,11 @@ with tabs[1]:
     with c8:
         st.markdown(metric_card(t("starts_2025"), int(row.get("starts_2025", 0))), unsafe_allow_html=True)
     with c9:
-        # näyttää 2026 tai 2027 jos dataa on
-        year_26 = int(row.get("starts_2026", 0))
         year_27 = int(row.get("starts_2027", 0))
         if year_27 > 0:
             st.markdown(metric_card(t("starts_2027"), year_27), unsafe_allow_html=True)
         else:
-            st.markdown(metric_card(t("starts_2026"), year_26), unsafe_allow_html=True)
+            st.markdown(metric_card(t("starts_2026"), int(row.get("starts_2026", 0))), unsafe_allow_html=True)
 
     ts = player_timeseries(df, pn)
 
@@ -498,7 +496,9 @@ with tabs[3]:
         chart_df = []
         for p in selected:
             pn = norm_name(p)
-            sub = df_perf[df_perf["player_norm"] == pn].sort_values("competition")[["competition", "performance_score"]].copy()
+            sub = df_perf[df_perf["player_norm"] == pn].sort_values("competition")[
+                ["competition", "performance_score"]
+            ].copy()
             sub["player"] = p
             chart_df.append(sub)
 
@@ -555,7 +555,6 @@ with tabs[4]:
   - 20% consistency
   - 15% trend_slope
         """)
-
 st.markdown("---")
 
 if LANG == "Suomi":
