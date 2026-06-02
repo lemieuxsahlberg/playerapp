@@ -61,6 +61,9 @@ LANG = st.radio("Kieli / Language", ["Suomi", "English"], horizontal=True)
 
 TEXT = {
     "title": {"Suomi": "Pelaajahaku & tilastot", "English": "Player Search & Statistics"},
+    "recent_improvers": {"Suomi": "Nousujohteisimmat (3 viime kisaa)", "English": "Most improving (last 3 competitions)"},
+    "overall_trend_rank": {"Suomi": "Nousujohteisimmat", "English": "Steepest upward trend"},
+    "search_players": {"Suomi": "Hae pelaajaa listasta", "English": "Search player in list"},
     "overview": {"Suomi": "Etusivu", "English": "Overview"},
     "player_trend": {"Suomi": "Kehityssuunta", "English": "Performance trend"},
     "player_search": {"Suomi": "Pelaajahaku", "English": "Player Search"},
@@ -225,6 +228,98 @@ def add_performance(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 def compute_player_table(df: pd.DataFrame) -> pd.DataFrame:
+    dfp = add_performance(df)
+
+    # Top 5
+    top5 = (
+        dfp[dfp["rank"] <= 5]
+        .groupby("player_norm")
+        .size()
+        .reset_index(name="top5_finishes")
+    )
+
+    total = (
+        dfp.groupby("player_norm")
+        .size()
+        .reset_index(name="starts")
+    )
+
+    base = total.merge(top5, on="player_norm", how="left").fillna({"top5_finishes": 0})
+    base["top5_rate"] = base["top5_finishes"] / base["starts"]
+
+    # Perusluvut
+    agg = (
+        dfp.groupby("player_norm")
+        .agg(
+            player=("player", "first"),
+            tournaments=("competition", "count"),
+            avg_rank=("rank", "mean"),
+            best_rank=("rank", "min"),
+            avg_perf=("performance_score", "mean"),
+            std_perf=("performance_score", "std"),
+        )
+        .reset_index()
+    )
+
+    agg["consistency"] = (1 - agg["std_perf"]).fillna(0)
+
+    # Koko historian trendi
+    trends = []
+    for pn, sub in dfp.sort_values("competition").groupby("player_norm"):
+        y = sub["performance_score"].to_numpy()
+
+        if len(y) >= 3:
+            x = np.arange(len(y))
+            trend_slope = np.polyfit(x, y, 1)[0]
+        else:
+            trend_slope = 0.0
+
+        current_form = float(np.mean(y[-5:])) if len(y) else np.nan
+
+        # OMAN 3 viimeisen pelatun kisan trendi
+        if len(y) >= 3:
+            last3 = y[-3:]
+            x3 = np.arange(len(last3))
+            last3_trend = np.polyfit(x3, last3, 1)[0]
+            last3_form = float(np.mean(last3))
+        else:
+            last3_trend = 0.0
+            last3_form = float(np.mean(y)) if len(y) else np.nan
+
+        trends.append((pn, trend_slope, current_form, last3_trend, last3_form))
+
+    trend_df = pd.DataFrame(
+        trends,
+        columns=["player_norm", "trend_slope", "current_form", "last3_trend", "last3_form"]
+    )
+
+    out = agg.merge(base, on="player_norm", how="left").merge(trend_df, on="player_norm", how="left")
+
+    # Vuosikohtaiset kisamäärät
+    yearly = (
+        dfp.groupby(["player_norm", "year"])["competition"]
+        .nunique()
+        .reset_index(name="starts_year")
+    )
+
+    ypivot = yearly.pivot(index="player_norm", columns="year", values="starts_year").fillna(0).reset_index()
+    ypivot.columns = [
+        f"starts_{int(c)}" if isinstance(c, (int, float)) and not pd.isna(c) else c
+        for c in ypivot.columns
+    ]
+
+    out = out.merge(ypivot, on="player_norm", how="left")
+
+    # Kokonaisscore
+    out["score"] = (
+        0.45 * out["avg_perf"] +
+        0.20 * out["top5_rate"] +
+        0.20 * out["consistency"] +
+        0.15 * out["trend_slope"]
+    )
+
+    return out.sort_values("score", ascending=False)
+``
     dfp = add_performance(df)
 
     # Top 5
