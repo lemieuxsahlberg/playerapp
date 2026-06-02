@@ -190,7 +190,7 @@ def load_data(path="results.parquet", version="v12") -> pd.DataFrame:
     df = df[df["player"].str.contains(r"[A-Za-zÅÄÖåäö]", regex=True, na=False)].copy()
 
     # Poistetaan Erik Hjalmarsson
-    excluded_norms = {"erik hjalmarsson"}
+    excluded_norms = {"hjalmarsson erik"}
     df["player_norm"] = df["player"].apply(norm_name)
     df = df[~df["player_norm"].isin(excluded_norms)].copy()
 
