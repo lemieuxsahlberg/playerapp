@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import unicodedata
+import re
 
 st.set_page_config(page_title="Pelaajahaku / Player Stats", layout="wide")
 
@@ -46,10 +47,6 @@ st.markdown("""
     font-size: 1.2rem;
     font-weight: 700;
 }
-.small-note {
-    color: #666;
-    font-size: 0.9rem;
-}
 </style>
 """, unsafe_allow_html=True)
 
@@ -80,21 +77,20 @@ TEXT = {
     "starts_2024": {"Suomi": "Kisat 2024", "English": "Starts 2024"},
     "starts_2025": {"Suomi": "Kisat 2025", "English": "Starts 2025"},
     "starts_2026": {"Suomi": "Kisat 2026", "English": "Starts 2026"},
+    "starts_2027": {"Suomi": "Kisat 2027", "English": "Starts 2027"},
     "player_trend": {"Suomi": "Pelaajan trendikäyrä", "English": "Player trend chart"},
     "recent_results": {"Suomi": "Viimeisimmät kilpailut", "English": "Most recent competitions"},
     "most_top5": {"Suomi": "Eniten Top 5 -sijoituksia", "English": "Most Top 5 finishes"},
-    "best_avg_perf": {"Suomi": "Paras keskimääräinen suoritus", "English": "Best average performance"},
     "best_avg_rank": {"Suomi": "Paras sijoituskeskiarvo", "English": "Best average rank"},
     "most_improving": {"Suomi": "Nousujohteisimmat", "English": "Most improving"},
     "select_players": {"Suomi": "Valitse pelaajat", "English": "Select players"},
     "comparison_trends": {"Suomi": "Vertailutrendit", "English": "Comparison trends"},
     "no_data": {"Suomi": "Dataa ei löytynyt.", "English": "No data found."},
     "no_matches": {"Suomi": "Ei osumia — näytetään koko lista.", "English": "No matches — showing full list."},
-    "footer": {"Suomi": "© 2026 – Kaikki oikeudet pidätetään.", "English": "© 2026 – All rights reserved."},
+    "footer": {"Suomi": "© 2026 Greta Sahlberg – Kaikki oikeudet pidätetään.", "English": "© 2026 Greta Sahlberg – All rights reserved."},
     "top_player_now": {"Suomi": "Top-pelaaja nyt", "English": "Top player right now"},
     "hot_player": {"Suomi": "Kuumin pelaaja", "English": "Hottest player"},
     "best_avg_rank_card": {"Suomi": "Paras sijoituskeskiarvo", "English": "Best average rank"},
-    "summary_state": {"Suomi": "Missä mennään yleisesti?", "English": "General overview"},
 }
 
 def t(key):
@@ -108,13 +104,9 @@ def norm_name(s: str) -> str:
 def year_from_competition(comp):
     try:
         comp = int(comp)
-        prefix = str(comp)[:2]
-        if prefix == "24":
-            return 2024
-        if prefix == "25":
-            return 2025
-        if prefix == "26":
-            return 2026
+        prefix = int(str(comp)[:2])
+        if 20 <= prefix <= 99:
+            return 2000 + prefix
         return None
     except Exception:
         return None
@@ -125,13 +117,12 @@ def score_color(value, metric_type="high"):
 
     if metric_type == "high":
         if value >= 0.80:
-            return "#2563eb"  # superhyvä = sininen
+            return "#2563eb"  # sininen = superhyvä
         elif value >= 0.60:
-            return "#16a34a"  # hyvä = vihreä
+            return "#16a34a"  # vihreä = hyvä
         else:
-            return "#dc2626"  # huono = punainen
+            return "#dc2626"  # punainen = huono
     else:
-        # pienempi on parempi
         if value <= 5:
             return "#2563eb"
         elif value <= 12:
@@ -156,7 +147,7 @@ def highlight_metric_card(label, value_html, color):
     """
 
 @st.cache_data
-def load_data(path="results.parquet", version="v10") -> pd.DataFrame:
+def load_data(path="results.parquet", version="v11") -> pd.DataFrame:
     df = pd.read_parquet(path).copy()
 
     df["rank"] = pd.to_numeric(df["rank"], errors="coerce")
@@ -171,12 +162,22 @@ def load_data(path="results.parquet", version="v10") -> pd.DataFrame:
     else:
         df["competition"] = np.nan
 
-    # Siivotaan tyhjät / kummittelevat nimet pois
+    # Siivotaan tyhjät nimet ja kilpailunimet pois
     df["player"] = df["player"].astype(str).str.strip()
     df = df[df["player"].notna()].copy()
     df = df[df["player"] != ""].copy()
     df = df[df["player"].str.lower() != "nan"].copy()
     df = df[~df["player"].isin(["-", "--", "None", "null"])].copy()
+
+    # Poistetaan todennäköiset kilpailu/otsikkorivit
+    bad_pattern = (
+        r"all players|osakilpailu|masters|rahola|kirjurinluoto|updated:|teams|"
+        r"general|class|qualification|matchplay|finnish adventure golf masters"
+    )
+    df = df[~df["player"].str.contains(bad_pattern, case=False, na=False)].copy()
+
+    # Poistetaan nimet joissa ei ole kirjaimia
+    df = df[df["player"].str.contains(r"[A-Za-zÅÄÖåäö]", regex=True, na=False)].copy()
 
     df["player_norm"] = df["player"].apply(norm_name)
     df["year"] = df["competition"].apply(year_from_competition)
@@ -235,18 +236,34 @@ def compute_player_table(df: pd.DataFrame) -> pd.DataFrame:
     trends = []
     for pn, sub in dfp.sort_values("competition").groupby("player_norm"):
         y = sub["performance_score"].to_numpy()
+
         if len(y) >= 3:
             x = np.arange(len(y))
             slope = np.polyfit(x, y, 1)[0]
         else:
             slope = 0.0
-        current_form = float(np.mean(y[-5:])) if len(y) else np.nan
-        trends.append((pn, slope, current_form))
 
-    trend_df = pd.DataFrame(trends, columns=["player_norm", "trend_slope", "current_form"])
+        current_form = float(np.mean(y[-5:])) if len(y) else np.nan
+
+        # viimeiset 3 kilpailua = "kuumin"
+        if len(y) >= 3:
+            last3 = y[-3:]
+            x3 = np.arange(len(last3))
+            last3_trend = np.polyfit(x3, last3, 1)[0]
+            last3_form = float(np.mean(last3))
+        else:
+            last3_trend = 0.0
+            last3_form = float(np.mean(y)) if len(y) else np.nan
+
+        trends.append((pn, slope, current_form, last3_trend, last3_form))
+
+    trend_df = pd.DataFrame(
+        trends,
+        columns=["player_norm", "trend_slope", "current_form", "last3_trend", "last3_form"]
+    )
+
     out = agg.merge(base, on="player_norm", how="left").merge(trend_df, on="player_norm", how="left")
 
-    # vuosikohtaiset kisamäärät pelaajalle
     yearly = (
         dfp.groupby(["player_norm", "year"])["competition"]
         .nunique()
@@ -278,7 +295,6 @@ def player_timeseries(df: pd.DataFrame, player_norm: str) -> pd.DataFrame:
 # ---------- Load ----------
 df = load_data()
 
-# Jos haluat sulkea pois kilpailuja, lisää tähän esim. [2409]
 exclude_ids = []
 if exclude_ids:
     df = df[~df["competition"].isin(exclude_ids)].copy()
@@ -318,7 +334,7 @@ with tabs[0]:
         st.markdown(metric_card(t("rows"), total_rows), unsafe_allow_html=True)
 
     best_score_row = players_table.sort_values("score", ascending=False).iloc[0]
-    hottest_row = players_table.sort_values(["trend_slope", "current_form"], ascending=False).iloc[0]
+    hottest_row = players_table.sort_values(["last3_form", "last3_trend"], ascending=False).iloc[0]
     best_avg_rank_row = players_table.sort_values("avg_rank", ascending=True).iloc[0]
 
     st.markdown("### Nostoja")
@@ -330,9 +346,12 @@ with tabs[0]:
         st.markdown(highlight_metric_card(t("top_player_now"), value, color), unsafe_allow_html=True)
 
     with c2:
-        hot_value = hottest_row["trend_slope"] + hottest_row["current_form"]
+        hot_value = hottest_row["last3_form"] + hottest_row["last3_trend"]
         color = score_color(hot_value, metric_type="high")
-        value = f"{hottest_row['player']}<br><span style='font-size:1rem;'>{t('trend')} {hottest_row['trend_slope']:+.4f}</span>"
+        if LANG == "Suomi":
+            value = f"{hottest_row['player']}<br><span style='font-size:1rem;'>Viim. 3 kisaa: {hottest_row['last3_form']:.3f} / trendi {hottest_row['last3_trend']:+.4f}</span>"
+        else:
+            value = f"{hottest_row['player']}<br><span style='font-size:1rem;'>Last 3: {hottest_row['last3_form']:.3f} / trend {hottest_row['last3_trend']:+.4f}</span>"
         st.markdown(highlight_metric_card(t("hot_player"), value, color), unsafe_allow_html=True)
 
     with c3:
@@ -353,9 +372,9 @@ with tabs[0]:
 
     with c2:
         st.markdown(f"#### {t('trend_home')}")
-        trend_home = players_table.sort_values("trend_slope", ascending=False).head(3)
+        trend_home = players_table.sort_values(["last3_form", "last3_trend"], ascending=False).head(3)
         st.dataframe(
-            trend_home[["player", "trend_slope", "current_form"]],
+            trend_home[["player", "last3_form", "last3_trend"]],
             use_container_width=True
         )
 
@@ -366,14 +385,6 @@ with tabs[0]:
             avg_rank_home[["player", "avg_rank", "best_rank"]],
             use_container_width=True
         )
-
-    st.markdown(f"### {t('summary_state')}")
-    overall_trend = (
-        df_perf.groupby("competition")["performance_score"]
-        .mean()
-        .sort_index()
-    )
-    st.line_chart(overall_trend)
 
 # ---------- Player Search ----------
 with tabs[1]:
@@ -418,7 +429,13 @@ with tabs[1]:
     with c8:
         st.markdown(metric_card(t("starts_2025"), int(row.get("starts_2025", 0))), unsafe_allow_html=True)
     with c9:
-        st.markdown(metric_card(t("starts_2026"), int(row.get("starts_2026", 0))), unsafe_allow_html=True)
+        # näyttää 2026 tai 2027 jos dataa on
+        year_26 = int(row.get("starts_2026", 0))
+        year_27 = int(row.get("starts_2027", 0))
+        if year_27 > 0:
+            st.markdown(metric_card(t("starts_2027"), year_27), unsafe_allow_html=True)
+        else:
+            st.markdown(metric_card(t("starts_2026"), year_26), unsafe_allow_html=True)
 
     ts = player_timeseries(df, pn)
 
@@ -450,8 +467,8 @@ with tabs[2]:
 
     st.markdown(f"### {t('most_improving')}")
     st.dataframe(
-        players_table.sort_values("trend_slope", ascending=False)[
-            ["player", "trend_slope", "current_form", "top5_rate", "consistency", "tournaments"]
+        players_table.sort_values(["last3_form", "last3_trend"], ascending=False)[
+            ["player", "last3_form", "last3_trend", "top5_rate", "consistency", "tournaments"]
         ].head(50),
         use_container_width=True
     )
@@ -467,9 +484,7 @@ with tabs[3]:
         chart_df = []
         for p in selected:
             pn = norm_name(p)
-            sub = df_perf[df_perf["player_norm"] == pn].sort_values("competition")[
-                ["competition", "performance_score"]
-            ].copy()
+            sub = df_perf[df_perf["player_norm"] == pn].sort_values("competition")[["competition", "performance_score"]].copy()
             sub["player"] = p
             chart_df.append(sub)
 
@@ -492,10 +507,12 @@ with tabs[4]:
 - **Tasaisuus** = `1 − std(performance_score)`  
 - **Trendi** = lineaarinen trendi performance_scorelle  
 - **Nykykunto** = viimeisten 5 kilpailun performance_score-keskiarvo  
-- **Vuosi** päätellään kilpailu-ID:n kahdesta ensimmäisestä numerosta:  
+- **Kuumin pelaaja** = paras viimeisten 3 kilpailun taso + nousu  
+- **Vuosi** päätellään kilpailu-ID:n kahdesta ensimmäisestä numerosta  
   - `24...` = 2024  
   - `25...` = 2025  
   - `26...` = 2026  
+  - `27...` = 2027  
 - **Score** = painotettu yhdistelmä:
   - 45 % avg_perf
   - 20 % top5_rate
@@ -512,10 +529,12 @@ with tabs[4]:
 - **Consistency** = `1 − std(performance_score)`  
 - **Trend** = linear slope of performance_score  
 - **Current form** = mean performance_score of last 5 competitions  
-- **Year** is inferred from the first two digits of competition ID:  
+- **Hottest player** = best level + strongest rise over the last 3 competitions  
+- **Year** is inferred from the first two digits of competition ID  
   - `24...` = 2024  
   - `25...` = 2025  
   - `26...` = 2026  
+  - `27...` = 2027  
 - **Score** = weighted combination:
   - 45% avg_perf
   - 20% top5_rate
