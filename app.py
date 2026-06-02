@@ -3,10 +3,7 @@ import pandas as pd
 import numpy as np
 import unicodedata
 
-st.set_page_config(
-    page_title="Pelaajahaku / Player Stats",
-    layout="wide"
-)
+st.set_page_config(page_title="Pelaajahaku / Player Stats", layout="wide")
 
 # ---------- Styling ----------
 st.markdown("""
@@ -46,7 +43,7 @@ st.markdown("""
     margin-bottom: 4px;
 }
 .highlight-value {
-    font-size: 1.25rem;
+    font-size: 1.2rem;
     font-weight: 700;
 }
 .small-note {
@@ -128,11 +125,11 @@ def score_color(value, metric_type="high"):
 
     if metric_type == "high":
         if value >= 0.80:
-            return "#2563eb"  # sininen = superhyvä
+            return "#2563eb"  # superhyvä = sininen
         elif value >= 0.60:
-            return "#16a34a"  # vihreä = hyvä
+            return "#16a34a"  # hyvä = vihreä
         else:
-            return "#dc2626"  # punainen = huono
+            return "#dc2626"  # huono = punainen
     else:
         # pienempi on parempi
         if value <= 5:
@@ -159,7 +156,7 @@ def highlight_metric_card(label, value_html, color):
     """
 
 @st.cache_data
-def load_data(path="results.parquet", version="v9") -> pd.DataFrame:
+def load_data(path="results.parquet", version="v10") -> pd.DataFrame:
     df = pd.read_parquet(path).copy()
 
     df["rank"] = pd.to_numeric(df["rank"], errors="coerce")
@@ -174,7 +171,7 @@ def load_data(path="results.parquet", version="v9") -> pd.DataFrame:
     else:
         df["competition"] = np.nan
 
-    # Poistetaan tyhjät/kummittelevat nimet
+    # Siivotaan tyhjät / kummittelevat nimet pois
     df["player"] = df["player"].astype(str).str.strip()
     df = df[df["player"].notna()].copy()
     df = df[df["player"] != ""].copy()
@@ -247,9 +244,9 @@ def compute_player_table(df: pd.DataFrame) -> pd.DataFrame:
         trends.append((pn, slope, current_form))
 
     trend_df = pd.DataFrame(trends, columns=["player_norm", "trend_slope", "current_form"])
-
     out = agg.merge(base, on="player_norm", how="left").merge(trend_df, on="player_norm", how="left")
 
+    # vuosikohtaiset kisamäärät pelaajalle
     yearly = (
         dfp.groupby(["player_norm", "year"])["competition"]
         .nunique()
@@ -281,6 +278,7 @@ def player_timeseries(df: pd.DataFrame, player_norm: str) -> pd.DataFrame:
 # ---------- Load ----------
 df = load_data()
 
+# Jos haluat sulkea pois kilpailuja, lisää tähän esim. [2409]
 exclude_ids = []
 if exclude_ids:
     df = df[~df["competition"].isin(exclude_ids)].copy()
@@ -304,7 +302,8 @@ tabs = st.tabs([
 ])
 
 # ---------- Overview ----------
-with tabsst.markdown(f"## {t('overview')}")
+with tabs[0]:
+    st.markdown(f"## {t('overview')}")
 
     total_players = df["player"].nunique()
     total_competitions = df["competition"].nunique()
@@ -377,7 +376,8 @@ with tabsst.markdown(f"## {t('overview')}")
     st.line_chart(overall_trend)
 
 # ---------- Player Search ----------
-with tabsst.markdown(f"## {t('player_search')}")
+with tabs[1]:
+    st.markdown(f"## {t('player_search')}")
 
     q = st.text_input(t("filter_name"), "")
     if q:
@@ -429,7 +429,8 @@ with tabsst.markdown(f"## {t('player_search')}")
     st.dataframe(ts.tail(20), use_container_width=True)
 
 # ---------- Rankings ----------
-with tabsst.markdown(f"## {t('rankings')}")
+with tabs[2]:
+    st.markdown(f"## {t('rankings')}")
 
     st.markdown(f"### {t('most_top5')}")
     st.dataframe(
@@ -456,7 +457,8 @@ with tabsst.markdown(f"## {t('rankings')}")
     )
 
 # ---------- Trends ----------
-with tabsst.markdown(f"## {t('comparison_trends')}")
+with tabs[3]:
+    st.markdown(f"## {t('comparison_trends')}")
 
     options = players_table["player"].tolist()
     selected = st.multiselect(t("select_players"), options=options, default=options[:2])
@@ -465,7 +467,9 @@ with tabsst.markdown(f"## {t('comparison_trends')}")
         chart_df = []
         for p in selected:
             pn = norm_name(p)
-            sub = df_perf[df_perf["player_norm"] == pn].sort_values("competition")[["competition", "performance_score"]].copy()
+            sub = df_perf[df_perf["player_norm"] == pn].sort_values("competition")[
+                ["competition", "performance_score"]
+            ].copy()
             sub["player"] = p
             chart_df.append(sub)
 
@@ -475,7 +479,8 @@ with tabsst.markdown(f"## {t('comparison_trends')}")
             st.line_chart(pivot)
 
 # ---------- Calculations ----------
-with tabsst.markdown(f"## {t('calculation')}")
+with tabs[4]:
+    st.markdown(f"## {t('calculation')}")
 
     if LANG == "Suomi":
         st.markdown("""
@@ -518,17 +523,9 @@ with tabsst.markdown(f"## {t('calculation')}")
   - 15% trend_slope
         """)
 
-
-t.markdown("---")
+st.markdown("---")
 
 if LANG == "Suomi":
-    st.markdown(
-        "<div style='text-align:center; color:#666; font-size:0.9rem; margin-top:20px;'>© 2026 Greta Sahlberg – Kaikki oikeudet pidätetään.</div>",
-        unsafe_allow_html=True
-    )
+    st.caption("© 2026 Greta Sahlberg – Kaikki oikeudet pidätetään.")
 else:
-    st.markdown(
-        "<div style='text-align:center; color:#666; font-size:0.9rem; margin-top:20px;'>© 2026 Greta Sahlberg – All rights reserved.</div>",
-        unsafe_allow_html=True
-    )
-
+    st.caption("© 2026 Greta Sahlberg – All rights reserved.")
