@@ -102,12 +102,16 @@ TEXT = {
 }
 
 def t(key):
-    return TEXT[key][LANG]
+    return TEXT.get(key, {"Suomi": key, "English": key}).get(LANG, key)
 
 # ---------- Helpers ----------
 def norm_name(s: str) -> str:
     s = unicodedata.normalize("NFKD", str(s)).encode("ascii", "ignore").decode()
     return s.lower().strip()
+
+"player_trend": {"Suomi": "Pelaajan trendikäyrä", "English": "Player trend chart"},
+"recent_results": {"Suomi": "Viimeisimmät kilpailut", "English": "Most recent competitions"},
+
 
 def year_from_competition(comp):
     """
