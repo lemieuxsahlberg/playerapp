@@ -300,6 +300,11 @@ def player_timeseries(df: pd.DataFrame, player_norm: str) -> pd.DataFrame:
 # ---------- Load ----------
 df = load_data()
 
+# Poissuljettavat pelaajat
+exclude_players = ["ERIK HJALMARSSON"]
+
+df = df[~df["player"].str.upper().isin(exclude_players)].copy()
+
 exclude_ids = []
 if exclude_ids:
     df = df[~df["competition"].isin(exclude_ids)].copy()
