@@ -68,7 +68,7 @@ TEXT = {
     "rows": {"Suomi": "Tulosrivejä", "English": "Result rows"},
 
     "top5_home": {"Suomi": "Eniten Top 5 -sijoituksia", "English": "Most Top 5 finishes"},
-    "consistent_home": {"Suomi": "Tasaisimmat pelaajat", "English": "Most consistent players"},
+    "active_home": {"Suomi": "Eniten kilpailuja", "English": "Most competitions"},
     "avg_rank_home": {"Suomi": "Paras sijoituskeskiarvo", "English": "Best average rank"},
 
     "filter_name": {"Suomi": "Suodata nimeä", "English": "Filter name"},
@@ -85,7 +85,7 @@ TEXT = {
 
     "most_top5": {"Suomi": "Eniten Top 5 -sijoituksia", "English": "Most Top 5 finishes"},
     "best_avg_rank": {"Suomi": "Paras sijoituskeskiarvo", "English": "Best average rank"},
-    "most_consistent": {"Suomi": "Tasaisimmat pelaajat", "English": "Most consistent players"},
+    "most_active": {"Suomi": "Eniten kilpailuja", "English": "Most competitions"},
     "long_term_dev": {"Suomi": "Pitkän aikavälin kehitys", "English": "Long-term development"},
     "search_players": {"Suomi": "Hae pelaajaa listasta", "English": "Search player in list"},
 
@@ -101,7 +101,7 @@ TEXT = {
     },
 
     "top_player_now": {"Suomi": "Top-pelaaja nyt", "English": "Top player right now"},
-    "most_consistent_card": {"Suomi": "Tasaisin pelaaja", "English": "Most consistent player"},
+    "most_active_card": {"Suomi": "Aktiivisin pelaaja", "English": "Most active player"},
     "best_avg_rank_card": {"Suomi": "Paras sijoituskeskiarvo", "English": "Best average rank"},
 }
 
@@ -196,7 +196,7 @@ def highlight_metric_card(label, value_html, color):
     """
 
 @st.cache_data
-def load_data(path="results.parquet", version="v40") -> pd.DataFrame:
+def load_data(path="results.parquet", version="v50") -> pd.DataFrame:
     df = pd.read_parquet(path).copy()
 
     df["rank"] = pd.to_numeric(df["rank"], errors="coerce")
@@ -228,7 +228,7 @@ def load_data(path="results.parquet", version="v40") -> pd.DataFrame:
     # Vain nimet joissa on kirjaimia
     df = df[df["player"].str.contains(r"[A-Za-zÅÄÖåäö]", regex=True, na=False)].copy()
 
-    # Poistetaan Erik Hjalmarsson (molemmat mahdolliset kirjoitusjärjestykset)
+    # Poistetaan Erik Hjalmarsson
     excluded_norms = {"erik hjalmarsson", "hjalmarsson erik"}
     df["player_norm"] = df["player"].apply(norm_name)
     df = df[~df["player_norm"].isin(excluded_norms)].copy()
@@ -382,9 +382,7 @@ with tabs[0]:
         st.markdown(metric_card(t("rows"), total_rows), unsafe_allow_html=True)
 
     best_score_row = players_table.sort_values("score", ascending=False).iloc[0]
-    most_consistent_row = players_table.sort_values(
-        ["consistency", "tournaments"], ascending=[False, False]
-    ).iloc[0]
+    most_active_row = players_table.sort_values("tournaments", ascending=False).iloc[0]
     best_avg_rank_row = players_table.sort_values("avg_rank", ascending=True).iloc[0]
 
     st.markdown("### Nostoja")
@@ -396,20 +394,18 @@ with tabs[0]:
         st.markdown(highlight_metric_card(t("top_player_now"), value, color), unsafe_allow_html=True)
 
     with c2:
-        color = score_color(most_consistent_row["consistency"], metric_type="high")
+        color = score_color(most_active_row["tournaments"], metric_type="high")
         if LANG == "Suomi":
             value = (
-                f"{most_consistent_row['player']}<br>"
-                f"<span style='font-size:1rem;'>Tasaisuus {most_consistent_row['consistency']:.3f} / "
-                f"{int(most_consistent_row['tournaments'])} kilpailua</span>"
+                f"{most_active_row['player']}<br>"
+                f"<span style='font-size:1rem;'>{int(most_active_row['tournaments'])} kilpailua</span>"
             )
         else:
             value = (
-                f"{most_consistent_row['player']}<br>"
-                f"<span style='font-size:1rem;'>Consistency {most_consistent_row['consistency']:.3f} / "
-                f"{int(most_consistent_row['tournaments'])} competitions</span>"
+                f"{most_active_row['player']}<br>"
+                f"<span style='font-size:1rem;'>{int(most_active_row['tournaments'])} competitions</span>"
             )
-        st.markdown(highlight_metric_card(t("most_consistent_card"), value, color), unsafe_allow_html=True)
+        st.markdown(highlight_metric_card(t("most_active_card"), value, color), unsafe_allow_html=True)
 
     with c3:
         color = score_color(best_avg_rank_row["avg_rank"], metric_type="low")
@@ -428,10 +424,10 @@ with tabs[0]:
         )
 
     with c2:
-        st.markdown(f"#### {t('consistent_home')}")
-        consistent_home = players_table.sort_values("consistency", ascending=False).head(3)
+        st.markdown(f"#### {t('active_home')}")
+        active_home = players_table.sort_values("tournaments", ascending=False).head(3)
         st.dataframe(
-            localize_columns(consistent_home[["player", "consistency", "tournaments"]]),
+            localize_columns(active_home[["player", "tournaments", "best_rank"]]),
             use_container_width=True
         )
 
@@ -528,11 +524,11 @@ with tabs[2]:
         use_container_width=True
     )
 
-    st.markdown(f"### {t('most_consistent')}")
+    st.markdown(f"### {t('most_active')}")
     st.dataframe(
         localize_columns(
-            players_table.sort_values("consistency", ascending=False)[
-                ["player", "consistency", "avg_rank", "top5_rate", "tournaments"]
+            players_table.sort_values("tournaments", ascending=False)[
+                ["player", "tournaments", "best_rank", "avg_rank", "top5_rate"]
             ].head(50)
         ),
         use_container_width=True
@@ -594,7 +590,7 @@ with tabs[4]:
 - **Tasaisuus** = `1 − std(performance_score)`  
 - **Trendi** = lineaarinen trendi performance_scorelle  
 - **Nykykunto** = viimeisten 5 kilpailun performance_score-keskiarvo  
-- **Tasaisimmat pelaajat** = suurin tasaisuusarvo  
+- **Eniten kilpailuja** = suurin kilpailumäärä  
 - **Pitkän aikavälin kehitys** = koko datan trendi  
 - **Vuosi** päätellään kilpailu-ID:n kahdesta ensimmäisestä numerosta  
   - `24...` = 2024  
@@ -617,7 +613,7 @@ with tabs[4]:
 - **Consistency** = `1 − std(performance_score)`  
 - **Trend** = linear slope of performance_score  
 - **Current form** = mean performance_score of last 5 competitions  
-- **Most consistent players** = highest consistency value  
+- **Most competitions** = highest competition count  
 - **Long-term development** = trend over the full dataset  
 - **Year** is inferred from the first two digits of competition ID  
   - `24...` = 2024  
@@ -631,7 +627,6 @@ with tabs[4]:
   - 15% trend_slope
         """)
 
-st.markdown("---")
 
 if LANG == "Suomi":
     st.caption("© 2026 Greta Sahlberg – Kaikki oikeudet pidätetään.")
