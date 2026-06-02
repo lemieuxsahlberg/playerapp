@@ -150,6 +150,11 @@ def highlight_metric_card(label, value_html, color):
 def load_data(path="results.parquet", version="v11") -> pd.DataFrame:
     df = pd.read_parquet(path).copy()
 
+    # Poissuljettavat pelaajat
+    exclude_players = ["ERIK HJALMARSSON"]
+
+    df = df[~df["player"].str.upper().isin(exclude_players)].copy()
+
     df["rank"] = pd.to_numeric(df["rank"], errors="coerce")
 
     if "competition" in df.columns:
