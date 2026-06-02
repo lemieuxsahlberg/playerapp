@@ -605,6 +605,7 @@ with tabs[1]:
     st.dataframe(ts.tail(20), use_container_width=True)
 
 # ---------- Rankings ----------
+# ---------- Rankings ----------
 with tabs[2]:
     st.markdown(f"## {t('rankings')}")
 
@@ -624,14 +625,33 @@ with tabs[2]:
         use_container_width=True
     )
 
-    st.markdown(f"### {t('most_improving')}")
-    rank_hot = hot_candidates.sort_values(["last3_form", "last3_trend"], ascending=False)
+    st.markdown(f"### {t('recent_improvers')}")
+    recent_improvers = players_table.sort_values("last3_trend", ascending=False)
     st.dataframe(
-        rank_hot[
-            ["player", "last3_form", "last3_trend", "top5_rate", "consistency", "tournaments"]
+        recent_improvers[
+            ["player", "last3_trend", "last3_form", "top5_rate", "consistency", "tournaments"]
         ].head(50),
         use_container_width=True
     )
+
+    st.markdown(f"### {t('overall_trend_rank')}")
+    ranking_query = st.text_input(t("search_players"), "")
+
+    overall_trend = players_table.sort_values("trend_slope", ascending=False).copy()
+
+    if ranking_query:
+        qn = norm_name(ranking_query)
+        overall_trend = overall_trend[
+            overall_trend["player_norm"].str.contains(qn, na=False)
+        ].copy()
+
+    st.dataframe(
+        overall_trend[
+            ["player", "trend_slope", "current_form", "top5_rate", "consistency", "tournaments"]
+        ].head(100),
+        use_container_width=True
+    )
+
 
 # ---------- Trends ----------
 with tabs[3]:
