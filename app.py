@@ -61,11 +61,7 @@ LANG = st.radio("Kieli / Language", ["Suomi", "English"], horizontal=True)
 
 TEXT = {
     "title": {"Suomi": "Pelaajahaku & tilastot", "English": "Player Search & Statistics"},
-    "recent_improvers": {"Suomi": "Nousujohteisimmat (3 viime kisaa)", "English": "Most improving (last 3 competitions)"},
-    "overall_trend_rank": {"Suomi": "Nousujohteisimmat", "English": "Steepest upward trend"},
-    "search_players": {"Suomi": "Hae pelaajaa listasta", "English": "Search player in list"},
     "overview": {"Suomi": "Etusivu", "English": "Overview"},
-    "player_trend": {"Suomi": "Kehityssuunta", "English": "Performance trend"},
     "player_search": {"Suomi": "Pelaajahaku", "English": "Player Search"},
     "rankings": {"Suomi": "Top-listat", "English": "Rankings"},
     "trends": {"Suomi": "Trendit", "English": "Trends"},
@@ -73,9 +69,11 @@ TEXT = {
     "players": {"Suomi": "Pelaajia", "English": "Players"},
     "competitions": {"Suomi": "Kilpailuja", "English": "Competitions"},
     "rows": {"Suomi": "Tulosrivejä", "English": "Result rows"},
+
     "top5_home": {"Suomi": "Eniten Top 5 -sijoituksia", "English": "Most Top 5 finishes"},
-    "trend_home": {"Suomi": "Nousujohteisimmat", "English": "Most improving"},
+    "trend_home": {"Suomi": "Nousujohteisimmat (3 viimeistä kisaa)", "English": "Most improving (last 3 starts)"},
     "avg_rank_home": {"Suomi": "Paras sijoituskeskiarvo", "English": "Best average rank"},
+
     "filter_name": {"Suomi": "Suodata nimeä", "English": "Filter name"},
     "select_player": {"Suomi": "Valitse pelaaja", "English": "Select player"},
     "best_rank": {"Suomi": "Paras sijoitus", "English": "Best rank"},
@@ -84,18 +82,25 @@ TEXT = {
     "consistency": {"Suomi": "Tasaisuus", "English": "Consistency"},
     "trend": {"Suomi": "Trendi", "English": "Trend"},
     "current_form": {"Suomi": "Nykykunto", "English": "Current form"},
+    "player_trend": {"Suomi": "Kehityssuunta", "English": "Performance trend"},
     "recent_results": {"Suomi": "Viimeisimmät kilpailut", "English": "Most recent competitions"},
+
     "most_top5": {"Suomi": "Eniten Top 5 -sijoituksia", "English": "Most Top 5 finishes"},
     "best_avg_rank": {"Suomi": "Paras sijoituskeskiarvo", "English": "Best average rank"},
-    "most_improving": {"Suomi": "Nousujohteisimmat", "English": "Most improving"},
+    "recent_improvers": {"Suomi": "Nousujohteisimmat (3 viimeistä kisaa)", "English": "Most improving (last 3 starts)"},
+    "overall_trend_rank": {"Suomi": "Jyrkimmän nousukäyrän omaavat", "English": "Steepest upward trend"},
+    "search_players": {"Suomi": "Hae pelaajaa listasta", "English": "Search player in list"},
+
     "select_players": {"Suomi": "Valitse pelaajat", "English": "Select players"},
     "comparison_trends": {"Suomi": "Vertailutrendit", "English": "Comparison trends"},
+
     "no_data": {"Suomi": "Dataa ei löytynyt.", "English": "No data found."},
     "no_matches": {"Suomi": "Ei osumia — näytetään koko lista.", "English": "No matches — showing full list."},
     "footer": {
         "Suomi": "© 2026 Greta Sahlberg – Kaikki oikeudet pidätetään.",
         "English": "© 2026 Greta Sahlberg – All rights reserved."
     },
+
     "top_player_now": {"Suomi": "Top-pelaaja nyt", "English": "Top player right now"},
     "hot_player": {"Suomi": "Kuumin pelaaja", "English": "Hottest player"},
     "best_avg_rank_card": {"Suomi": "Paras sijoituskeskiarvo", "English": "Best average rank"},
@@ -103,16 +108,43 @@ TEXT = {
         "Suomi": "Perustuu koko datan kolmeen viimeisimpään kilpailuun.",
         "English": "Based on the latest 3 competitions in the full dataset."
     },
+    "starts_by_year": {"Suomi": "Kisat vuosittain", "English": "Starts by year"},
 }
 
 def t(key):
     return TEXT.get(key, {"Suomi": key, "English": key}).get(LANG, key)
 
+# ---------- Column labels ----------
+COL_LABELS = {
+    "player": {"Suomi": "Pelaaja", "English": "Player"},
+    "top5_finishes": {"Suomi": "Top 5", "English": "Top 5"},
+    "top5_rate": {"Suomi": "Top 5 -osuus", "English": "Top 5 rate"},
+    "best_rank": {"Suomi": "Paras sijoitus", "English": "Best rank"},
+    "avg_rank": {"Suomi": "Sijoituskeskiarvo", "English": "Average rank"},
+    "consistency": {"Suomi": "Tasaisuus", "English": "Consistency"},
+    "current_form": {"Suomi": "Nykykunto", "English": "Current form"},
+    "trend_slope": {"Suomi": "Trendi", "English": "Trend"},
+    "last3_form": {"Suomi": "Viim. 3 tason keskiarvo", "English": "Last 3 form"},
+    "last3_trend": {"Suomi": "Viim. 3 trendi", "English": "Last 3 trend"},
+    "tournaments": {"Suomi": "Kilpailuja", "English": "Competitions"},
+    "competition": {"Suomi": "Kilpailu-ID", "English": "Competition ID"},
+    "rank": {"Suomi": "Sijoitus", "English": "Rank"},
+    "year": {"Suomi": "Vuosi", "English": "Year"},
+    "score": {"Suomi": "Score", "English": "Score"},
+}
+
+def localize_columns(df_in: pd.DataFrame) -> pd.DataFrame:
+    df_out = df_in.copy()
+    rename_map = {}
+    for c in df_out.columns:
+        if c in COL_LABELS:
+            rename_map[c] = COL_LABELS[c][LANG]
+    return df_out.rename(columns=rename_map)
+
 # ---------- Helpers ----------
 def norm_name(s: str) -> str:
     s = unicodedata.normalize("NFKD", str(s)).encode("ascii", "ignore").decode()
     return s.lower().strip()
-
 
 def year_from_competition(comp):
     """
@@ -132,11 +164,6 @@ def year_from_competition(comp):
         return None
 
 def score_color(value, metric_type="high"):
-    """
-    metric_type:
-    - 'high' = suurempi parempi
-    - 'low' = pienempi parempi
-    """
     if pd.isna(value):
         return "#999999"
 
@@ -172,7 +199,7 @@ def highlight_metric_card(label, value_html, color):
     """
 
 @st.cache_data
-def load_data(path="results.parquet", version="v13") -> pd.DataFrame:
+def load_data(path="results.parquet", version="v20") -> pd.DataFrame:
     df = pd.read_parquet(path).copy()
 
     df["rank"] = pd.to_numeric(df["rank"], errors="coerce")
@@ -201,7 +228,7 @@ def load_data(path="results.parquet", version="v13") -> pd.DataFrame:
     )
     df = df[~df["player"].str.contains(bad_pattern, case=False, na=False)].copy()
 
-    # Poistetaan rivit joissa ei ole kirjaimia
+    # Vain nimet joissa on kirjaimia
     df = df[df["player"].str.contains(r"[A-Za-zÅÄÖåäö]", regex=True, na=False)].copy()
 
     # Poistetaan Erik Hjalmarsson (molemmat mahdolliset kirjoitusjärjestykset)
@@ -263,8 +290,8 @@ def compute_player_table(df: pd.DataFrame) -> pd.DataFrame:
 
     agg["consistency"] = (1 - agg["std_perf"]).fillna(0)
 
-    # Koko historian trendi
-    trends = []
+    # Koko historian trendi + nykykunto + pelaajan omat 3 viimeistä kisaa
+    trend_rows = []
     for pn, sub in dfp.sort_values("competition").groupby("player_norm"):
         y = sub["performance_score"].to_numpy()
 
@@ -276,7 +303,7 @@ def compute_player_table(df: pd.DataFrame) -> pd.DataFrame:
 
         current_form = float(np.mean(y[-5:])) if len(y) else np.nan
 
-        # OMAN 3 viimeisen pelatun kisan trendi
+        # Pelaajan omat 3 viimeistä pelattua kisaa
         if len(y) >= 3:
             last3 = y[-3:]
             x3 = np.arange(len(last3))
@@ -286,97 +313,16 @@ def compute_player_table(df: pd.DataFrame) -> pd.DataFrame:
             last3_trend = 0.0
             last3_form = float(np.mean(y)) if len(y) else np.nan
 
-        trends.append((pn, trend_slope, current_form, last3_trend, last3_form))
+        trend_rows.append((pn, trend_slope, current_form, last3_trend, last3_form))
 
     trend_df = pd.DataFrame(
-        trends,
+        trend_rows,
         columns=["player_norm", "trend_slope", "current_form", "last3_trend", "last3_form"]
     )
 
     out = agg.merge(base, on="player_norm", how="left").merge(trend_df, on="player_norm", how="left")
 
-    # Vuosikohtaiset kisamäärät
-    yearly = (
-        dfp.groupby(["player_norm", "year"])["competition"]
-        .nunique()
-        .reset_index(name="starts_year")
-    )
-
-    ypivot = yearly.pivot(index="player_norm", columns="year", values="starts_year").fillna(0).reset_index()
-    ypivot.columns = [
-        f"starts_{int(c)}" if isinstance(c, (int, float)) and not pd.isna(c) else c
-        for c in ypivot.columns
-    ]
-
-    out = out.merge(ypivot, on="player_norm", how="left")
-
-    # Kokonaisscore
-    out["score"] = (
-        0.45 * out["avg_perf"] +
-        0.20 * out["top5_rate"] +
-        0.20 * out["consistency"] +
-        0.15 * out["trend_slope"]
-    )
-
-    return out.sort_values("score", ascending=False)
-
-    dfp = add_performance(df)
-
-    # Top 5
-    top5 = (
-        dfp[dfp["rank"] <= 5]
-        .groupby("player_norm")
-        .size()
-        .reset_index(name="top5_finishes")
-    )
-
-    total = (
-        dfp.groupby("player_norm")
-        .size()
-        .reset_index(name="starts")
-    )
-
-    base = total.merge(top5, on="player_norm", how="left").fillna({"top5_finishes": 0})
-    base["top5_rate"] = base["top5_finishes"] / base["starts"]
-
-    # Perusluvut
-    agg = (
-        dfp.groupby("player_norm")
-        .agg(
-            player=("player", "first"),
-            tournaments=("competition", "count"),
-            avg_rank=("rank", "mean"),
-            best_rank=("rank", "min"),
-            avg_perf=("performance_score", "mean"),
-            std_perf=("performance_score", "std"),
-        )
-        .reset_index()
-    )
-
-    agg["consistency"] = (1 - agg["std_perf"]).fillna(0)
-
-    # Koko historian trendi + nykykunto
-    trends = []
-    for pn, sub in dfp.sort_values("competition").groupby("player_norm"):
-        y = sub["performance_score"].to_numpy()
-
-        if len(y) >= 3:
-            x = np.arange(len(y))
-            slope = np.polyfit(x, y, 1)[0]
-        else:
-            slope = 0.0
-
-        current_form = float(np.mean(y[-5:])) if len(y) else np.nan
-        trends.append((pn, slope, current_form))
-
-    trend_df = pd.DataFrame(
-        trends,
-        columns=["player_norm", "trend_slope", "current_form"]
-    )
-
-    out = agg.merge(base, on="player_norm", how="left").merge(trend_df, on="player_norm", how="left")
-
-    # ----- Kuumin pelaaja = koko datan 3 viimeisintä kilpailua -----
+    # Kuumin pelaaja = koko datan 3 viimeisintä kilpailua
     latest_competitions = sorted(dfp["competition"].dropna().unique())[-3:]
     df_last3_global = dfp[dfp["competition"].isin(latest_competitions)].copy()
 
@@ -387,17 +333,17 @@ def compute_player_table(df: pd.DataFrame) -> pd.DataFrame:
 
         if len(y) >= 2:
             x = np.arange(len(y))
-            last3_trend = np.polyfit(x, y, 1)[0]
+            global3_trend = np.polyfit(x, y, 1)[0]
         else:
-            last3_trend = 0.0
+            global3_trend = 0.0
 
-        last3_form = float(np.mean(y)) if len(y) else np.nan
+        global3_form = float(np.mean(y)) if len(y) else np.nan
 
-        hot_rows.append((pn, last3_form, last3_trend, comp_count))
+        hot_rows.append((pn, global3_form, global3_trend, comp_count))
 
     hot_df = pd.DataFrame(
         hot_rows,
-        columns=["player_norm", "last3_form", "last3_trend", "last3_comp_count"]
+        columns=["player_norm", "global3_form", "global3_trend", "global3_comp_count"]
     )
 
     out = out.merge(hot_df, on="player_norm", how="left")
@@ -476,12 +422,12 @@ with tabs[0]:
 
     best_score_row = players_table.sort_values("score", ascending=False).iloc[0]
 
-    hot_candidates = players_table[players_table["last3_comp_count"] >= 2].copy()
+    hot_candidates = players_table[players_table["global3_comp_count"] >= 2].copy()
     if hot_candidates.empty:
         hot_candidates = players_table.copy()
 
     hottest_row = hot_candidates.sort_values(
-        ["last3_form", "last3_trend"],
+        ["global3_form", "global3_trend"],
         ascending=False
     ).iloc[0]
 
@@ -496,19 +442,19 @@ with tabs[0]:
         st.markdown(highlight_metric_card(t("top_player_now"), value, color), unsafe_allow_html=True)
 
     with c2:
-        hot_value = hottest_row["last3_form"] + hottest_row["last3_trend"]
+        hot_value = hottest_row["global3_form"] + hottest_row["global3_trend"]
         color = score_color(hot_value, metric_type="high")
         if LANG == "Suomi":
             value = (
                 f"{hottest_row['player']}<br>"
-                f"<span style='font-size:1rem;'>Viim. 3 kilpailua: {hottest_row['last3_form']:.3f} / "
-                f"trendi {hottest_row['last3_trend']:+.4f}</span>"
+                f"<span style='font-size:1rem;'>3 viimeisintä kilpailua: {hottest_row['global3_form']:.3f} / "
+                f"trendi {hottest_row['global3_trend']:+.4f}</span>"
             )
         else:
             value = (
                 f"{hottest_row['player']}<br>"
-                f"<span style='font-size:1rem;'>Last 3 competitions: {hottest_row['last3_form']:.3f} / "
-                f"trend {hottest_row['last3_trend']:+.4f}</span>"
+                f"<span style='font-size:1rem;'>Latest 3 competitions: {hottest_row['global3_form']:.3f} / "
+                f"trend {hottest_row['global3_trend']:+.4f}</span>"
             )
         st.markdown(highlight_metric_card(t("hot_player"), value, color), unsafe_allow_html=True)
         st.caption(t("latest3_note"))
@@ -525,16 +471,15 @@ with tabs[0]:
         st.markdown(f"#### {t('top5_home')}")
         top5_home = players_table.sort_values(["top5_finishes", "top5_rate"], ascending=False).head(3)
         st.dataframe(
-            top5_home[["player", "top5_finishes", "top5_rate"]],
+            localize_columns(top5_home[["player", "top5_finishes", "top5_rate"]]),
             use_container_width=True
         )
 
     with c2:
-        
-        st.markdown(f"#### {t('recent_improvers')}")
-        trend_home = players_table.sort_values("last3_trend", ascending=False).head(3)
+        st.markdown(f"#### {t('trend_home')}")
+        recent_improvers_home = players_table.sort_values("last3_trend", ascending=False).head(3)
         st.dataframe(
-            trend_home[["player", "last3_trend", "last3_form"]],
+            localize_columns(recent_improvers_home[["player", "last3_trend", "last3_form"]]),
             use_container_width=True
         )
 
@@ -542,7 +487,7 @@ with tabs[0]:
         st.markdown(f"#### {t('avg_rank_home')}")
         avg_rank_home = players_table.sort_values("avg_rank", ascending=True).head(3)
         st.dataframe(
-            avg_rank_home[["player", "avg_rank", "best_rank"]],
+            localize_columns(avg_rank_home[["player", "avg_rank", "best_rank"]]),
             use_container_width=True
         )
 
@@ -588,12 +533,12 @@ with tabs[1]:
     year_cols = sorted(year_cols, key=lambda x: int(str(x).split("_")[1]))
 
     if year_cols:
-        st.markdown("### Vuosikohtaiset kisamäärät" if LANG == "Suomi" else "Competitions by year")
-        cols = st.columns(min(4, len(year_cols)))
+        st.markdown(f"### {t('starts_by_year')}")
+        year_cards_cols = st.columns(min(4, len(year_cols)))
         for i, col in enumerate(year_cols):
             year = col.split("_")[1]
             label = f"Kisat {year}" if LANG == "Suomi" else f"Starts {year}"
-            with cols[i % len(cols)]:
+            with year_cards_cols[i % len(year_cards_cols)]:
                 st.markdown(metric_card(label, int(row.get(col, 0))), unsafe_allow_html=True)
 
     ts = player_timeseries(df, pn)
@@ -602,35 +547,42 @@ with tabs[1]:
     st.line_chart(ts.set_index("competition")["performance_score"])
 
     st.markdown(f"### {t('recent_results')}")
-    st.dataframe(ts.tail(20), use_container_width=True)
+    st.dataframe(
+        localize_columns(ts.tail(20)),
+        use_container_width=True
+    )
 
-# ---------- Rankings ----------
 # ---------- Rankings ----------
 with tabs[2]:
     st.markdown(f"## {t('rankings')}")
 
     st.markdown(f"### {t('most_top5')}")
     st.dataframe(
-        players_table.sort_values("top5_finishes", ascending=False)[
-            ["player", "top5_finishes", "top5_rate", "tournaments", "best_rank", "consistency"]
-        ].head(50),
+        localize_columns(
+            players_table.sort_values("top5_finishes", ascending=False)[
+                ["player", "top5_finishes", "top5_rate", "tournaments", "best_rank", "consistency"]
+            ].head(50)
+        ),
         use_container_width=True
     )
 
     st.markdown(f"### {t('best_avg_rank')}")
     st.dataframe(
-        players_table.sort_values("avg_rank", ascending=True)[
-            ["player", "avg_rank", "best_rank", "top5_rate", "consistency", "tournaments"]
-        ].head(50),
+        localize_columns(
+            players_table.sort_values("avg_rank", ascending=True)[
+                ["player", "avg_rank", "best_rank", "top5_rate", "consistency", "tournaments"]
+            ].head(50)
+        ),
         use_container_width=True
     )
 
     st.markdown(f"### {t('recent_improvers')}")
-    recent_improvers = players_table.sort_values("last3_trend", ascending=False)
     st.dataframe(
-        recent_improvers[
-            ["player", "last3_trend", "last3_form", "top5_rate", "consistency", "tournaments"]
-        ].head(50),
+        localize_columns(
+            players_table.sort_values("last3_trend", ascending=False)[
+                ["player", "last3_trend", "last3_form", "top5_rate", "consistency", "tournaments"]
+            ].head(50)
+        ),
         use_container_width=True
     )
 
@@ -646,12 +598,13 @@ with tabs[2]:
         ].copy()
 
     st.dataframe(
-        overall_trend[
-            ["player", "trend_slope", "current_form", "top5_rate", "consistency", "tournaments"]
-        ].head(100),
+        localize_columns(
+            overall_trend[
+                ["player", "trend_slope", "current_form", "top5_rate", "consistency", "tournaments"]
+            ].head(100)
+        ),
         use_container_width=True
     )
-
 
 # ---------- Trends ----------
 with tabs[3]:
@@ -689,6 +642,7 @@ with tabs[4]:
 - **Tasaisuus** = `1 − std(performance_score)`  
 - **Trendi** = lineaarinen trendi performance_scorelle  
 - **Nykykunto** = viimeisten 5 kilpailun performance_score-keskiarvo  
+- **Nousujohteisimmat (3 viimeistä kisaa)** = pelaajan omien 3 viimeisen pelatun kilpailun trendi  
 - **Kuumin pelaaja** = perustuu koko datan kolmeen viimeisimpään kilpailuun  
 - **Vuosi** päätellään kilpailu-ID:n kahdesta ensimmäisestä numerosta  
   - `24...` = 2024  
@@ -711,6 +665,7 @@ with tabs[4]:
 - **Consistency** = `1 − std(performance_score)`  
 - **Trend** = linear slope of performance_score  
 - **Current form** = mean performance_score of last 5 competitions  
+- **Most improving (last 3 starts)** = trend based on the player's own latest 3 played competitions  
 - **Hottest player** = based on the latest 3 competitions in the whole dataset  
 - **Year** is inferred from the first two digits of competition ID  
   - `24...` = 2024  
