@@ -62,6 +62,7 @@ LANG = st.radio("Kieli / Language", ["Suomi", "English"], horizontal=True)
 TEXT = {
     "title": {"Suomi": "Pelaajahaku & tilastot", "English": "Player Search & Statistics"},
     "overview": {"Suomi": "Etusivu", "English": "Overview"},
+    "player_trend": {"Suomi": "Kehityssuunta", "English": "Performance trend"},
     "player_search": {"Suomi": "Pelaajahaku", "English": "Player Search"},
     "rankings": {"Suomi": "Top-listat", "English": "Rankings"},
     "trends": {"Suomi": "Trendit", "English": "Trends"},
