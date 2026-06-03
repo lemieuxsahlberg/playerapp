@@ -622,7 +622,6 @@ with tabs[4]:
 - **Nykykunto** = viimeisten 5 kilpailun performance_score-keskiarvo  
 - **Eniten kilpailuja** = suurin kilpailumäärä  
 - **Pitkän aikavälin kehitys** = koko datan trendi  
-- **Greta Wedman + Greta Sahlberg** yhdistetään samaksi pelaajaksi nimellä **Greta Sahlberg**  
 - **Vuosi** päätellään kilpailu-ID:n kahdesta ensimmäisestä numerosta  
   - `24...` = 2024  
   - `25...` = 2025  
