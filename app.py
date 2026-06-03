@@ -658,3 +658,8 @@ with tabs[4]:
   - 20% consistency
   - 15% trend_slope
         """)
+
+
+st.markdown("---")
+st.caption(t("footer"))
+
