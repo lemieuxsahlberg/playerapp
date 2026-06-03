@@ -231,6 +231,18 @@ def load_data(path="results.parquet", version="v50") -> pd.DataFrame:
     # Poistetaan Erik Hjalmarsson
     excluded_norms = {"erik hjalmarsson", "hjalmarsson erik"}
     df["player_norm"] = df["player"].apply(norm_name)
+    # --- Yhdistetään samat henkilöt (alias-nimet) ---
+    alias_map = {
+    "greta wedman": "greta sahlberg",
+    }
+
+df["player_norm"] = df["player_norm"].replace(alias_map)
+
+# päivitetään myös näkyvä nimi yhdenmukaiseksi
+df["player"] = df.apply(
+    lambda row: "Greta Sahlberg" if row["player_norm"] == "greta sahlberg" else row["player"],
+    axis=1
+)
     df = df[~df["player_norm"].isin(excluded_norms)].copy()
 
     df["year"] = df["competition"].apply(year_from_competition)
