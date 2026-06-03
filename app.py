@@ -67,9 +67,9 @@ TEXT = {
     "competitions": {"Suomi": "Kilpailuja", "English": "Competitions"},
     "rows": {"Suomi": "Tulosrivejä", "English": "Result rows"},
 
+    "score_home": {"Suomi": "Score", "English": "Score"},
+    "active_home": {"Suomi": "Aktiivisuus", "English": "Activity"},
     "top5_home": {"Suomi": "Eniten Top 5 -sijoituksia", "English": "Most Top 5 finishes"},
-    "active_home": {"Suomi": "Eniten kilpailuja", "English": "Most competitions"},
-    "avg_rank_home": {"Suomi": "Paras sijoituskeskiarvo", "English": "Best average rank"},
 
     "filter_name": {"Suomi": "Suodata nimeä", "English": "Filter name"},
     "select_player": {"Suomi": "Valitse pelaaja", "English": "Select player"},
@@ -83,6 +83,7 @@ TEXT = {
     "recent_results": {"Suomi": "Viimeisimmät kilpailut", "English": "Most recent competitions"},
     "starts_by_year": {"Suomi": "Kisat vuosittain", "English": "Starts by year"},
 
+    "score_label": {"Suomi": "Score-järjestys", "English": "Score ranking"},
     "most_top5": {"Suomi": "Eniten Top 5 -sijoituksia", "English": "Most Top 5 finishes"},
     "best_avg_rank": {"Suomi": "Paras sijoituskeskiarvo", "English": "Best average rank"},
     "most_active": {"Suomi": "Eniten kilpailuja", "English": "Most competitions"},
@@ -100,9 +101,9 @@ TEXT = {
         "English": "© 2026 Greta Sahlberg – All rights reserved."
     },
 
-    "top_player_now": {"Suomi": "Top-pelaaja nyt", "English": "Top player right now"},
+    "top_player_now": {"Suomi": "Paras score", "English": "Best score"},
     "most_active_card": {"Suomi": "Aktiivisin pelaaja", "English": "Most active player"},
-    "best_avg_rank_card": {"Suomi": "Paras sijoituskeskiarvo", "English": "Best average rank"},
+    "most_top5_card": {"Suomi": "Eniten Top 5 -sijoituksia", "English": "Most Top 5 finishes"},
 }
 
 def t(key):
@@ -202,7 +203,7 @@ def highlight_metric_card(label, value_html, color):
     """
 
 @st.cache_data
-def load_data(path="results.parquet", version="v61") -> pd.DataFrame:
+def load_data(path="results.parquet", version="v70") -> pd.DataFrame:
     df = pd.read_parquet(path).copy()
 
     df["rank"] = pd.to_numeric(df["rank"], errors="coerce")
@@ -413,7 +414,7 @@ with tabs[0]:
 
     best_score_row = players_table.sort_values("score", ascending=False).iloc[0]
     most_active_row = players_table.sort_values("tournaments", ascending=False).iloc[0]
-    best_avg_rank_row = players_table.sort_values("avg_rank", ascending=True).iloc[0]
+    most_top5_row = players_table.sort_values(["top5_finishes", "top5_rate"], ascending=False).iloc[0]
 
     st.markdown("### Nostoja")
     c1, c2, c3 = st.columns(3)
@@ -438,18 +439,27 @@ with tabs[0]:
         st.markdown(highlight_metric_card(t("most_active_card"), value, color), unsafe_allow_html=True)
 
     with c3:
-        color = score_color(best_avg_rank_row["avg_rank"], metric_type="low")
-        value = f"{best_avg_rank_row['player']}<br><span style='font-size:1rem;'>{best_avg_rank_row['avg_rank']:.2f}</span>"
-        st.markdown(highlight_metric_card(t("best_avg_rank_card"), value, color), unsafe_allow_html=True)
+        color = score_color(most_top5_row["top5_rate"], metric_type="high")
+        if LANG == "Suomi":
+            value = (
+                f"{most_top5_row['player']}<br>"
+                f"<span style='font-size:1rem;'>{int(most_top5_row['top5_finishes'])} Top 5 -sijoitusta</span>"
+            )
+        else:
+            value = (
+                f"{most_top5_row['player']}<br>"
+                f"<span style='font-size:1rem;'>{int(most_top5_row['top5_finishes'])} Top-5 finishes</span>"
+            )
+        st.markdown(highlight_metric_card(t("most_top5_card"), value, color), unsafe_allow_html=True)
 
     st.markdown("### Top 3")
     c1, c2, c3 = st.columns(3)
 
     with c1:
-        st.markdown(f"#### {t('top5_home')}")
-        top5_home = players_table.sort_values(["top5_finishes", "top5_rate"], ascending=False).head(3)
+        st.markdown(f"#### {t('score_home')}")
+        score_home = players_table.sort_values("score", ascending=False).head(3)
         st.dataframe(
-            localize_columns(top5_home[["player", "top5_finishes", "top5_rate"]]),
+            localize_columns(score_home[["player", "score", "best_rank"]]),
             use_container_width=True
         )
 
@@ -462,10 +472,10 @@ with tabs[0]:
         )
 
     with c3:
-        st.markdown(f"#### {t('avg_rank_home')}")
-        avg_rank_home = players_table.sort_values("avg_rank", ascending=True).head(3)
+        st.markdown(f"#### {t('top5_home')}")
+        top5_home = players_table.sort_values(["top5_finishes", "top5_rate"], ascending=False).head(3)
         st.dataframe(
-            localize_columns(avg_rank_home[["player", "avg_rank", "best_rank"]]),
+            localize_columns(top5_home[["player", "top5_finishes", "top5_rate"]]),
             use_container_width=True
         )
 
@@ -533,6 +543,16 @@ with tabs[1]:
 # ---------- Rankings ----------
 with tabs[2]:
     st.markdown(f"## {t('rankings')}")
+
+    st.markdown(f"### {t('score_label')}")
+    st.dataframe(
+        localize_columns(
+            players_table.sort_values("score", ascending=False)[
+                ["player", "score", "avg_rank", "top5_rate", "consistency", "tournaments"]
+            ].head(50)
+        ),
+        use_container_width=True
+    )
 
     st.markdown(f"### {t('most_top5')}")
     st.dataframe(
@@ -657,7 +677,6 @@ with tabs[4]:
   - 20% consistency
   - 15% trend_slope
         """)
-
 
 st.markdown("---")
 st.caption(t("footer"))
