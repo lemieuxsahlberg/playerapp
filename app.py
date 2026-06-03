@@ -86,7 +86,7 @@ TEXT = {
     "most_top5": {"Suomi": "Eniten Top 5 -sijoituksia", "English": "Most Top 5 finishes"},
     "best_avg_rank": {"Suomi": "Paras sijoituskeskiarvo", "English": "Best average rank"},
     "most_active": {"Suomi": "Eniten kilpailuja", "English": "Most competitions"},
-    "long_term_dev": {"Suomi": "Kehitys", "English": "Long-term development"},
+    "long_term_dev": {"Suomi": "Pitkän aikavälin kehitys", "English": "Long-term development"},
     "search_players": {"Suomi": "Hae pelaajaa listasta", "English": "Search player in list"},
 
     "select_players": {"Suomi": "Valitse pelaajat", "English": "Select players"},
@@ -196,7 +196,7 @@ def highlight_metric_card(label, value_html, color):
     """
 
 @st.cache_data
-def load_data(path="results.parquet", version="v51") -> pd.DataFrame:
+def load_data(path="results.parquet", version="v60") -> pd.DataFrame:
     df = pd.read_parquet(path).copy()
 
     df["rank"] = pd.to_numeric(df["rank"], errors="coerce")
@@ -231,71 +231,20 @@ def load_data(path="results.parquet", version="v51") -> pd.DataFrame:
     # Normalisoitu nimi
     df["player_norm"] = df["player"].apply(norm_name)
 
-    # --- Yhdistetään alias-nimet ---
+    # --- Alias-yhdistykset ---
     alias_map = {
         "greta wedman": "greta sahlberg",
     }
     df["player_norm"] = df["player_norm"].replace(alias_map)
 
-    # Päivitetään näkyvä nimi yhdenmukaiseksi
+    # Yhtenäinen näkyvä nimi
     df["player"] = df.apply(
         lambda row: "Greta Sahlberg" if row["player_norm"] == "greta sahlberg" else row["player"],
         axis=1
     )
 
-    # Poistetaan Erik Hjalmarsson (molemmat mahdolliset kirjoitusjärjestykset)
-    excluded_norms = {"erik hjalmarsson", "hjalmarsson erik"}
-    df = df[~df["player_norm"].isin(excluded_norms)].copy()
-
-    df["year"] = df["competition"].apply(year_from_competition)
-    return df
-
-    df = pd.read_parquet(path).copy()
-
-    df["rank"] = pd.to_numeric(df["rank"], errors="coerce")
-
-    if "competition" in df.columns:
-        df["competition"] = pd.to_numeric(df["competition"], errors="coerce")
-    elif "source" in df.columns:
-        df["competition"] = pd.to_numeric(
-            df["source"].astype(str).str.extract(r"/(\d+)/")[0],
-            errors="coerce"
-        )
-    else:
-        df["competition"] = np.nan
-
-    # Siivotaan nimet
-    df["player"] = df["player"].astype(str).str.strip()
-    df = df[df["player"].notna()].copy()
-    df = df[df["player"] != ""].copy()
-    df = df[df["player"].str.lower() != "nan"].copy()
-    df = df[~df["player"].isin(["-", "--", "None", "null"])].copy()
-
-    # Poistetaan todennäköiset kilpailu-/otsikkorivit
-    bad_pattern = (
-        r"all players|osakilpailu|masters|rahola|kirjurinluoto|updated:|teams|"
-        r"general|class|qualification|matchplay|finnish adventure golf masters"
-    )
-    df = df[~df["player"].str.contains(bad_pattern, case=False, na=False)].copy()
-
-    # Vain nimet joissa on kirjaimia
-    df = df[df["player"].str.contains(r"[A-Za-zÅÄÖåäö]", regex=True, na=False)].copy()
-
     # Poistetaan Erik Hjalmarsson
     excluded_norms = {"erik hjalmarsson", "hjalmarsson erik"}
-    df["player_norm"] = df["player"].apply(norm_name)
-    # --- Yhdistetään samat henkilöt (alias-nimet) ---
-    alias_map = {
-    "greta wedman": "greta sahlberg",
-    }
-
-    df["player_norm"] = df["player_norm"].replace(alias_map)
-
-# päivitetään myös näkyvä nimi yhdenmukaiseksi
-    df["player"] = df.apply(
-    lambda row: "Greta Sahlberg" if row["player_norm"] == "greta sahlberg" else row["player"],
-    axis=1
-    )
     df = df[~df["player_norm"].isin(excluded_norms)].copy()
 
     df["year"] = df["competition"].apply(year_from_competition)
@@ -657,6 +606,7 @@ with tabs[4]:
 - **Nykykunto** = viimeisten 5 kilpailun performance_score-keskiarvo  
 - **Eniten kilpailuja** = suurin kilpailumäärä  
 - **Pitkän aikavälin kehitys** = koko datan trendi  
+- **Greta Wedman + Greta Sahlberg** yhdistetään samaksi pelaajaksi nimellä **Greta Sahlberg**  
 - **Vuosi** päätellään kilpailu-ID:n kahdesta ensimmäisestä numerosta  
   - `24...` = 2024  
   - `25...` = 2025  
@@ -680,6 +630,7 @@ with tabs[4]:
 - **Current form** = mean performance_score of last 5 competitions  
 - **Most competitions** = highest competition count  
 - **Long-term development** = trend over the full dataset  
+- **Greta Wedman + Greta Sahlberg** are merged into one player shown as **Greta Sahlberg**  
 - **Year** is inferred from the first two digits of competition ID  
   - `24...` = 2024  
   - `25...` = 2025  
@@ -692,6 +643,8 @@ with tabs[4]:
   - 15% trend_slope
         """)
 
+st.markdown("---")
+st.caption(t("footer"))
 
 if LANG == "Suomi":
     st.caption("© 2026 Greta Sahlberg – Kaikki oikeudet pidätetään.")
