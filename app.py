@@ -196,7 +196,60 @@ def highlight_metric_card(label, value_html, color):
     """
 
 @st.cache_data
-def load_data(path="results.parquet", version="v50") -> pd.DataFrame:
+def load_data(path="results.parquet", version="v51") -> pd.DataFrame:
+    df = pd.read_parquet(path).copy()
+
+    df["rank"] = pd.to_numeric(df["rank"], errors="coerce")
+
+    if "competition" in df.columns:
+        df["competition"] = pd.to_numeric(df["competition"], errors="coerce")
+    elif "source" in df.columns:
+        df["competition"] = pd.to_numeric(
+            df["source"].astype(str).str.extract(r"/(\d+)/")[0],
+            errors="coerce"
+        )
+    else:
+        df["competition"] = np.nan
+
+    # Siivotaan nimet
+    df["player"] = df["player"].astype(str).str.strip()
+    df = df[df["player"].notna()].copy()
+    df = df[df["player"] != ""].copy()
+    df = df[df["player"].str.lower() != "nan"].copy()
+    df = df[~df["player"].isin(["-", "--", "None", "null"])].copy()
+
+    # Poistetaan todennäköiset kilpailu-/otsikkorivit
+    bad_pattern = (
+        r"all players|osakilpailu|masters|rahola|kirjurinluoto|updated:|teams|"
+        r"general|class|qualification|matchplay|finnish adventure golf masters"
+    )
+    df = df[~df["player"].str.contains(bad_pattern, case=False, na=False)].copy()
+
+    # Vain nimet joissa on kirjaimia
+    df = df[df["player"].str.contains(r"[A-Za-zÅÄÖåäö]", regex=True, na=False)].copy()
+
+    # Normalisoitu nimi
+    df["player_norm"] = df["player"].apply(norm_name)
+
+    # --- Yhdistetään alias-nimet ---
+    alias_map = {
+        "greta wedman": "greta sahlberg",
+    }
+    df["player_norm"] = df["player_norm"].replace(alias_map)
+
+    # Päivitetään näkyvä nimi yhdenmukaiseksi
+    df["player"] = df.apply(
+        lambda row: "Greta Sahlberg" if row["player_norm"] == "greta sahlberg" else row["player"],
+        axis=1
+    )
+
+    # Poistetaan Erik Hjalmarsson (molemmat mahdolliset kirjoitusjärjestykset)
+    excluded_norms = {"erik hjalmarsson", "hjalmarsson erik"}
+    df = df[~df["player_norm"].isin(excluded_norms)].copy()
+
+    df["year"] = df["competition"].apply(year_from_competition)
+    return df
+
     df = pd.read_parquet(path).copy()
 
     df["rank"] = pd.to_numeric(df["rank"], errors="coerce")
@@ -242,7 +295,7 @@ def load_data(path="results.parquet", version="v50") -> pd.DataFrame:
     df["player"] = df.apply(
     lambda row: "Greta Sahlberg" if row["player_norm"] == "greta sahlberg" else row["player"],
     axis=1
-)
+    )
     df = df[~df["player_norm"].isin(excluded_norms)].copy()
 
     df["year"] = df["competition"].apply(year_from_competition)
