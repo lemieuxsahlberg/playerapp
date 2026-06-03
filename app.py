@@ -596,16 +596,16 @@ with tabs[4]:
 
     if LANG == "Suomi":
         st.markdown("""
-- **Paras sijoitus** = pienin rank  
+- **Paras sijoitus** = pienin rank-arvo
 - **Sijoituskeskiarvo** = sijoitusten keskiarvo  
 - **Top 5** = montako kertaa rank ≤ 5  
-- **Top 5 -osuus** = top5 / starts  
-- **Performance score** = `1 − (rank−1)/(field_size−1)`  
+- **Top 5 -osuus** = top5 - rank/ kilpailumäärä  
+- **Performance score** = `1 − (rank−1)/(osallistujamäärä−1)`  
 - **Tasaisuus** = `1 − std(performance_score)`  
 - **Trendi** = lineaarinen trendi performance_scorelle  
 - **Nykykunto** = viimeisten 5 kilpailun performance_score-keskiarvo  
 - **Eniten kilpailuja** = suurin kilpailumäärä  
-- **Pitkän aikavälin kehitys** = koko datan trendi  
+- **Pitkän aikavälin kehitys** = koko datan trendi + positiivinen = nousujohteinen, - negatiivinen = laskujohteinen
 - **Vuosi** päätellään kilpailu-ID:n kahdesta ensimmäisestä numerosta  
   - `24...` = 2024  
   - `25...` = 2025  
