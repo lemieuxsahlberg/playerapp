@@ -659,10 +659,6 @@ with tabs[4]:
   - 15% trend_slope
         """)
 
-st.markdown("---")
-st.caption(t("footer"))
 
-if LANG == "Suomi":
-    st.caption("© 2026 Greta Sahlberg – Kaikki oikeudet pidätetään.")
 else:
     st.caption("© 2026 Greta Sahlberg – All rights reserved.")
