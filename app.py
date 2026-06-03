@@ -658,7 +658,3 @@ with tabs[4]:
   - 20% consistency
   - 15% trend_slope
         """)
-
-
-else:
-    st.caption("© 2026 Greta Sahlberg – All rights reserved.")
