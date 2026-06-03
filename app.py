@@ -236,10 +236,10 @@ def load_data(path="results.parquet", version="v50") -> pd.DataFrame:
     "greta wedman": "greta sahlberg",
     }
 
-df["player_norm"] = df["player_norm"].replace(alias_map)
+    df["player_norm"] = df["player_norm"].replace(alias_map)
 
 # päivitetään myös näkyvä nimi yhdenmukaiseksi
-df["player"] = df.apply(
+    df["player"] = df.apply(
     lambda row: "Greta Sahlberg" if row["player_norm"] == "greta sahlberg" else row["player"],
     axis=1
 )
