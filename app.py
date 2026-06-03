@@ -138,6 +138,17 @@ def norm_name(s: str) -> str:
     s = unicodedata.normalize("NFKD", str(s)).encode("ascii", "ignore").decode()
     return s.lower().strip()
 
+def make_search_key(normed: str) -> str:
+    """
+    Mahdollistaa haun molemmilla nimijärjestyksillä:
+    'sahlberg greta' <-> 'greta sahlberg'
+    """
+    parts = normed.split()
+    if len(parts) >= 2:
+        reversed_name = " ".join(parts[::-1])
+        return f"{normed} {reversed_name}"
+    return normed
+
 def year_from_competition(comp):
     """
     Esim.
@@ -156,11 +167,6 @@ def year_from_competition(comp):
         return None
 
 def score_color(value, metric_type="high"):
-    """
-    metric_type:
-    - 'high' = suurempi parempi
-    - 'low' = pienempi parempi
-    """
     if pd.isna(value):
         return "#999999"
 
@@ -196,7 +202,7 @@ def highlight_metric_card(label, value_html, color):
     """
 
 @st.cache_data
-def load_data(path="results.parquet", version="v60") -> pd.DataFrame:
+def load_data(path="results.parquet", version="v61") -> pd.DataFrame:
     df = pd.read_parquet(path).copy()
 
     df["rank"] = pd.to_numeric(df["rank"], errors="coerce")
@@ -231,17 +237,20 @@ def load_data(path="results.parquet", version="v60") -> pd.DataFrame:
     # Normalisoitu nimi
     df["player_norm"] = df["player"].apply(norm_name)
 
-    # --- Alias-yhdistykset ---
+    # --- Alias-yhdistykset Gretalle ---
     alias_map = {
-        "greta wedman": "greta sahlberg",
+        "wedman greta": "sahlberg greta",
+        "greta wedman": "sahlberg greta",
+        "sahlberg greta": "sahlberg greta",
+        "greta sahlberg": "sahlberg greta",
     }
     df["player_norm"] = df["player_norm"].replace(alias_map)
 
-    # Yhtenäinen näkyvä nimi
-    df["player"] = df.apply(
-        lambda row: "Greta Sahlberg" if row["player_norm"] == "greta sahlberg" else row["player"],
-        axis=1
-    )
+    # Näytetään kaikki Gretan rivit yhtenä nimellä
+    df.loc[df["player_norm"] == "sahlberg greta", "player"] = "Greta Sahlberg"
+
+    # Hakukentän avuksi molemmat nimijärjestykset
+    df["player_search_key"] = df["player_norm"].apply(make_search_key)
 
     # Poistetaan Erik Hjalmarsson
     excluded_norms = {"erik hjalmarsson", "hjalmarsson erik"}
@@ -280,6 +289,12 @@ def compute_player_table(df: pd.DataFrame) -> pd.DataFrame:
         dfp.groupby("player_norm")
         .size()
         .reset_index(name="starts")
+    )
+
+    search_key = (
+        dfp.groupby("player_norm")["player_search_key"]
+        .first()
+        .reset_index(name="player_search_key")
     )
 
     base = total.merge(top5, on="player_norm", how="left").fillna({"top5_finishes": 0})
@@ -322,6 +337,7 @@ def compute_player_table(df: pd.DataFrame) -> pd.DataFrame:
     )
 
     out = agg.merge(base, on="player_norm", how="left").merge(trend_df, on="player_norm", how="left")
+    out = out.merge(search_key, on="player_norm", how="left")
 
     # Vuosikohtaiset kisamäärät
     yearly = (
@@ -461,7 +477,7 @@ with tabs[1]:
     if q:
         qn = norm_name(q)
         options = players_table[
-            players_table["player_norm"].str.contains(qn, na=False)
+            players_table["player_search_key"].str.contains(qn, na=False)
         ]["player"].tolist()
         if not options:
             options = players_table["player"].tolist()
@@ -470,7 +486,7 @@ with tabs[1]:
         options = players_table["player"].tolist()
 
     chosen = st.selectbox(t("select_player"), options=options, index=0)
-    pn = norm_name(chosen)
+    pn = players_table.loc[players_table["player"] == chosen, "player_norm"].iloc[0]
     row = players_table[players_table["player_norm"] == pn].iloc[0]
 
     c1, c2, c3 = st.columns(3)
@@ -556,7 +572,7 @@ with tabs[2]:
     if ranking_query:
         qn = norm_name(ranking_query)
         overall_trend = overall_trend[
-            overall_trend["player_norm"].str.contains(qn, na=False)
+            overall_trend["player_search_key"].str.contains(qn, na=False)
         ].copy()
 
     st.dataframe(
@@ -578,7 +594,7 @@ with tabs[3]:
     if selected:
         chart_df = []
         for p in selected:
-            pn = norm_name(p)
+            pn = players_table.loc[players_table["player"] == p, "player_norm"].iloc[0]
             sub = df_perf[df_perf["player_norm"] == pn].sort_values("competition")[
                 ["competition", "performance_score"]
             ].copy()
@@ -596,16 +612,17 @@ with tabs[4]:
 
     if LANG == "Suomi":
         st.markdown("""
-- **Paras sijoitus** = pienin rank-arvo
+- **Paras sijoitus** = pienin rank  
 - **Sijoituskeskiarvo** = sijoitusten keskiarvo  
 - **Top 5** = montako kertaa rank ≤ 5  
-- **Top 5 -osuus** = top5 - rank/ kilpailumäärä  
-- **Performance score** = `1 − (rank−1)/(osallistujamäärä−1)`  
+- **Top 5 -osuus** = top5 / starts  
+- **Performance score** = `1 − (rank−1)/(field_size−1)`  
 - **Tasaisuus** = `1 − std(performance_score)`  
 - **Trendi** = lineaarinen trendi performance_scorelle  
 - **Nykykunto** = viimeisten 5 kilpailun performance_score-keskiarvo  
 - **Eniten kilpailuja** = suurin kilpailumäärä  
-- **Pitkän aikavälin kehitys** = koko datan trendi + positiivinen = nousujohteinen, - negatiivinen = laskujohteinen
+- **Pitkän aikavälin kehitys** = koko datan trendi  
+- **Greta Wedman + Greta Sahlberg** yhdistetään samaksi pelaajaksi nimellä **Greta Sahlberg**  
 - **Vuosi** päätellään kilpailu-ID:n kahdesta ensimmäisestä numerosta  
   - `24...` = 2024  
   - `25...` = 2025  
@@ -629,6 +646,7 @@ with tabs[4]:
 - **Current form** = mean performance_score of last 5 competitions  
 - **Most competitions** = highest competition count  
 - **Long-term development** = trend over the full dataset  
+- **Greta Wedman + Greta Sahlberg** are merged into one player shown as **Greta Sahlberg**  
 - **Year** is inferred from the first two digits of competition ID  
   - `24...` = 2024  
   - `25...` = 2025  
