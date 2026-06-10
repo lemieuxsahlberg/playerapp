@@ -1,683 +1,1002 @@
+
 import streamlit as st
 import pandas as pd
-import numpy as np
-import unicodedata
+from datetime import date, datetime
+from db import get_supabase
 
-st.set_page_config(
-    page_title="Pelaajahaku / Player Stats",
-    layout="wide"
-)
+st.set_page_config(page_title="Bankontoret", layout="wide")
+supabase = get_supabase()
 
-# ---------- Styling ----------
-st.markdown("""
-<style>
-.block-container {
-    max-width: 1200px;
-    padding-top: 2rem;
-    padding-bottom: 2rem;
-}
-.metric-card {
-    background: #f8f9fb;
-    border: 1px solid #e7ebf0;
-    border-radius: 16px;
-    padding: 16px 18px;
-    margin-bottom: 10px;
-}
-.metric-label {
-    font-size: 0.9rem;
-    color: #666;
-    margin-bottom: 4px;
-}
-.metric-value {
-    font-size: 1.6rem;
-    font-weight: 700;
-    color: #111;
-}
-.highlight-card {
-    background: #ffffff;
-    border-radius: 16px;
-    padding: 16px 18px;
-    margin-bottom: 12px;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
-}
-.highlight-label {
-    font-size: 0.9rem;
-    color: #666;
-    margin-bottom: 4px;
-}
-.highlight-value {
-    font-size: 1.2rem;
-    font-weight: 700;
-}
-</style>
-""", unsafe_allow_html=True)
+SURFACE_OPTIONS = ["eterniitti", "betoni", "huopa", "MOS"]
+PAR_BY_SURFACE = {"eterniitti": 18, "betoni": 27, "huopa": 36, "MOS": 36}
+ROUND_TYPE_OPTIONS = ["harjoitus", "kisa"]
+ROUND_STATUS_OPTIONS = ["completed", "draft", "abandoned"]
+STATUS_LABELS = {"completed": "valmis", "draft": "kesken", "abandoned": "hylätty"}
+STATUS_LABEL_TO_VALUE = {v: k for k, v in STATUS_LABELS.items()}
+ADMIN_EMAIL = "gretasofiaisabella@gmail.com"
+MAX_HOLES = 18
 
-# ---------- Language ----------
-LANG = st.radio("Kieli / Language", ["Suomi", "English"], horizontal=True)
+# -------------------------------------------------
+# Yleinen UI
+# -------------------------------------------------
+def apply_custom_css():
+    st.markdown(
+        """
+        <style>
+            .block-container {padding-top: 1rem; padding-bottom: 2rem; max-width: 1100px;}
+            #MainMenu {visibility: hidden;}
+            header[data-testid="stHeader"] {visibility: hidden; height: 0;}
+            [data-testid="stToolbar"] {display: none !important;}
+            [data-testid="stDecoration"] {display: none !important;}
+            section[data-testid="stSidebar"] {display:none !important;}
+            footer {visibility: hidden;}
+            div[data-testid="stMetric"] {
+                background: #f8fafc;
+                border: 1px solid #e2e8f0;
+                border-radius: 12px;
+                padding: .65rem .85rem;
+            }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
-TEXT = {
-    "title": {"Suomi": "Pelaajahaku & tilastot", "English": "Player Search & Statistics"},
-    "overview": {"Suomi": "Etusivu", "English": "Overview"},
-    "player_search": {"Suomi": "Pelaajahaku", "English": "Player Search"},
-    "rankings": {"Suomi": "Top-listat", "English": "Rankings"},
-    "trends": {"Suomi": "Trendit", "English": "Trends"},
-    "calculation": {"Suomi": "Laskentaperusteet", "English": "How the numbers are calculated"},
 
-    "players": {"Suomi": "Pelaajia", "English": "Players"},
-    "competitions": {"Suomi": "Kilpailuja", "English": "Competitions"},
-    "rows": {"Suomi": "Tulosrivejä", "English": "Result rows"},
+def safe_data(resp):
+    return getattr(resp, "data", None) or []
 
-    "score_home": {"Suomi": "Score", "English": "Score"},
-    "active_home": {"Suomi": "Aktiivisuus", "English": "Activity"},
-    "top5_home": {"Suomi": "Eniten Top 5 -sijoituksia", "English": "Most Top 5 finishes"},
 
-    "filter_name": {"Suomi": "Suodata nimeä", "English": "Filter name"},
-    "select_player": {"Suomi": "Valitse pelaaja", "English": "Select player"},
-    "best_rank": {"Suomi": "Paras sijoitus", "English": "Best rank"},
-    "avg_rank": {"Suomi": "Sijoituskeskiarvo", "English": "Average rank"},
-    "top5": {"Suomi": "Top 5", "English": "Top 5"},
-    "consistency": {"Suomi": "Tasaisuus", "English": "Consistency"},
-    "trend": {"Suomi": "Trendi", "English": "Trend"},
-    "current_form": {"Suomi": "Nykykunto", "English": "Current form"},
-    "player_trend": {"Suomi": "Kehityssuunta", "English": "Performance trend"},
-    "recent_results": {"Suomi": "Viimeisimmät kilpailut", "English": "Most recent competitions"},
-    "starts_by_year": {"Suomi": "Kisat vuosittain", "English": "Starts by year"},
+def title_block(title, subtitle=None):
+    st.subheader(title)
+    if subtitle:
+        st.caption(subtitle)
 
-    "score_label": {"Suomi": "Score-järjestys", "English": "Score ranking"},
-    "most_top5": {"Suomi": "Eniten Top 5 -sijoituksia", "English": "Most Top 5 finishes"},
-    "best_avg_rank": {"Suomi": "Paras sijoituskeskiarvo", "English": "Best average rank"},
-    "most_active": {"Suomi": "Eniten kilpailuja", "English": "Most competitions"},
-    "long_term_dev": {"Suomi": "Pitkän aikavälin kehitys", "English": "Long-term development"},
-    "search_players": {"Suomi": "Hae pelaajaa listasta", "English": "Search player in list"},
 
-    "select_players": {"Suomi": "Valitse pelaajat", "English": "Select players"},
-    "comparison_trends": {"Suomi": "Vertailutrendit", "English": "Comparison trends"},
+def ui_error(message, err):
+    st.error(f"{message} {err}")
 
-    "no_data": {"Suomi": "Dataa ei löytynyt.", "English": "No data found."},
-    "no_matches": {"Suomi": "Ei osumia — näytetään koko lista.", "English": "No matches — showing full list."},
 
-    "footer": {
-        "Suomi": "© 2026 Greta Sahlberg – Kaikki oikeudet pidätetään.",
-        "English": "© 2026 Greta Sahlberg – All rights reserved."
-    },
-
-    "top_player_now": {"Suomi": "Paras score", "English": "Best score"},
-    "most_active_card": {"Suomi": "Aktiivisin pelaaja", "English": "Most active player"},
-    "most_top5_card": {"Suomi": "Eniten Top 5 -sijoituksia", "English": "Most Top 5 finishes"},
-}
-
-def t(key):
-    return TEXT.get(key, {"Suomi": key, "English": key}).get(LANG, key)
-
-# ---------- Column labels ----------
-COL_LABELS = {
-    "player": {"Suomi": "Pelaaja", "English": "Player"},
-    "top5_finishes": {"Suomi": "Top 5", "English": "Top 5"},
-    "top5_rate": {"Suomi": "Top 5 -osuus", "English": "Top 5 rate"},
-    "best_rank": {"Suomi": "Paras sijoitus", "English": "Best rank"},
-    "avg_rank": {"Suomi": "Sijoituskeskiarvo", "English": "Average rank"},
-    "consistency": {"Suomi": "Tasaisuus", "English": "Consistency"},
-    "current_form": {"Suomi": "Nykykunto", "English": "Current form"},
-    "trend_slope": {"Suomi": "Trendi", "English": "Trend"},
-    "tournaments": {"Suomi": "Kilpailuja", "English": "Competitions"},
-    "competition": {"Suomi": "Kilpailu-ID", "English": "Competition ID"},
-    "rank": {"Suomi": "Sijoitus", "English": "Rank"},
-    "year": {"Suomi": "Vuosi", "English": "Year"},
-    "score": {"Suomi": "Score", "English": "Score"},
-}
-
-def localize_columns(df_in: pd.DataFrame) -> pd.DataFrame:
-    df_out = df_in.copy()
-    rename_map = {}
-    for c in df_out.columns:
-        if c in COL_LABELS:
-            rename_map[c] = COL_LABELS[c][LANG]
-    return df_out.rename(columns=rename_map)
-
-# ---------- Helpers ----------
-def norm_name(s: str) -> str:
-    s = unicodedata.normalize("NFKD", str(s)).encode("ascii", "ignore").decode()
-    return s.lower().strip()
-
-def make_search_key(normed: str) -> str:
-    """
-    Mahdollistaa haun molemmilla nimijärjestyksillä:
-    'sahlberg greta' <-> 'greta sahlberg'
-    """
-    parts = normed.split()
-    if len(parts) >= 2:
-        reversed_name = " ".join(parts[::-1])
-        return f"{normed} {reversed_name}"
-    return normed
-
-def year_from_competition(comp):
-    """
-    Esim.
-    24xx -> 2024
-    25xx -> 2025
-    26xx -> 2026
-    27xx -> 2027
-    """
-    try:
-        comp = int(comp)
-        prefix = int(str(comp)[:2])
-        if 20 <= prefix <= 99:
-            return 2000 + prefix
+def to_date(value):
+    if value is None:
         return None
+    if isinstance(value, date):
+        return value
+    try:
+        return datetime.fromisoformat(str(value)).date()
     except Exception:
         return None
 
-def score_color(value, metric_type="high"):
-    if pd.isna(value):
-        return "#999999"
 
-    if metric_type == "high":
-        if value >= 0.80:
-            return "#2563eb"  # superhyvä = sininen
-        elif value >= 0.60:
-            return "#16a34a"  # hyvä = vihreä
-        else:
-            return "#dc2626"  # huono = punainen
-    else:
-        if value <= 5:
-            return "#2563eb"
-        elif value <= 12:
-            return "#16a34a"
-        else:
-            return "#dc2626"
+def format_status(value):
+    return STATUS_LABELS.get(value, value)
 
-def metric_card(label, value):
-    return f"""
-    <div class="metric-card">
-        <div class="metric-label">{label}</div>
-        <div class="metric-value">{value}</div>
-    </div>
-    """
 
-def highlight_metric_card(label, value_html, color):
-    return f"""
-    <div class="highlight-card" style="border: 2px solid {color}; border-left: 8px solid {color};">
-        <div class="highlight-label">{label}</div>
-        <div class="highlight-value" style="color: {color};">{value_html}</div>
-    </div>
-    """
+def band_for_score(surface, total_score):
+    if not surface or total_score is None:
+        return ("Tuntematon", "#6b7280")
+    if surface == "eterniitti":
+        if 18 <= total_score <= 20:
+            return ("Sininen", "#2563eb")
+        if 21 <= total_score <= 24:
+            return ("Vihreä", "#16a34a")
+        if 25 <= total_score <= 29:
+            return ("Punainen", "#dc2626")
+        if total_score > 29:
+            return ("Musta", "#111827")
+    if surface == "betoni":
+        if 18 <= total_score <= 27:
+            return ("Sininen", "#2563eb")
+        if 28 <= total_score <= 30:
+            return ("Vihreä", "#16a34a")
+        if 31 <= total_score <= 35:
+            return ("Punainen", "#dc2626")
+        if total_score > 35:
+            return ("Musta", "#111827")
+    if surface in ["huopa", "MOS"]:
+        if 18 <= total_score <= 29:
+            return ("Sininen", "#2563eb")
+        if 30 <= total_score <= 35:
+            return ("Vihreä", "#16a34a")
+        if 36 <= total_score <= 39:
+            return ("Punainen", "#dc2626")
+        if total_score > 39:
+            return ("Musta", "#111827")
+    return ("Alle rajan", "#6b7280")
 
-@st.cache_data
-def load_data(path="results.parquet", version="v70") -> pd.DataFrame:
-    df = pd.read_parquet(path).copy()
 
-    df["rank"] = pd.to_numeric(df["rank"], errors="coerce")
-
-    if "competition" in df.columns:
-        df["competition"] = pd.to_numeric(df["competition"], errors="coerce")
-    elif "source" in df.columns:
-        df["competition"] = pd.to_numeric(
-            df["source"].astype(str).str.extract(r"/(\d+)/")[0],
-            errors="coerce"
-        )
-    else:
-        df["competition"] = np.nan
-
-    # Siivotaan nimet
-    df["player"] = df["player"].astype(str).str.strip()
-    df = df[df["player"].notna()].copy()
-    df = df[df["player"] != ""].copy()
-    df = df[df["player"].str.lower() != "nan"].copy()
-    df = df[~df["player"].isin(["-", "--", "None", "null"])].copy()
-
-    # Poistetaan todennäköiset kilpailu-/otsikkorivit
-    bad_pattern = (
-        r"all players|osakilpailu|masters|rahola|kirjurinluoto|updated:|teams|"
-        r"general|class|qualification|matchplay|finnish adventure golf masters"
+def render_band_badge(surface, total_score):
+    label, color = band_for_score(surface, total_score)
+    st.markdown(
+        f"<span style='display:inline-block;padding:.35rem .7rem;border-radius:999px;background:{color};color:#fff;font-weight:600'>{label}</span>",
+        unsafe_allow_html=True,
     )
-    df = df[~df["player"].str.contains(bad_pattern, case=False, na=False)].copy()
 
-    # Vain nimet joissa on kirjaimia
-    df = df[df["player"].str.contains(r"[A-Za-zÅÄÖåäö]", regex=True, na=False)].copy()
-
-    # Normalisoitu nimi
-    df["player_norm"] = df["player"].apply(norm_name)
-
-    # --- Alias-yhdistykset Gretalle ---
-    alias_map = {
-        "wedman greta": "sahlberg greta",
-        "greta wedman": "sahlberg greta",
-        "sahlberg greta": "sahlberg greta",
-        "greta sahlberg": "sahlberg greta",
+# -------------------------------------------------
+# Session & auth
+# -------------------------------------------------
+def init_state():
+    defaults = {
+        "access_token": None,
+        "refresh_token": None,
+        "user": None,
+        "view": "Etusivu",
+        "current_round_id": None,
+        "current_course_id": None,
+        "current_holes": [],
+        "current_hole_pos": 0,
+        "current_round_holes_map": {},
+        "current_round_shots_map": {},
     }
-    df["player_norm"] = df["player_norm"].replace(alias_map)
+    for k, v in defaults.items():
+        if k not in st.session_state:
+            st.session_state[k] = v
 
-    # Näytetään kaikki Gretan rivit yhtenä nimellä
-    df.loc[df["player_norm"] == "sahlberg greta", "player"] = "Greta Sahlberg"
 
-    # Hakukentän avuksi molemmat nimijärjestykset
-    df["player_search_key"] = df["player_norm"].apply(make_search_key)
+def restore_auth_session():
+    if st.session_state.access_token and st.session_state.refresh_token:
+        try:
+            supabase.auth.set_session(st.session_state.access_token, st.session_state.refresh_token)
+            user_resp = supabase.auth.get_user()
+            st.session_state.user = user_resp.user if user_resp else None
+        except Exception:
+            st.session_state.access_token = None
+            st.session_state.refresh_token = None
+            st.session_state.user = None
 
-    # Poistetaan Erik Hjalmarsson
-    excluded_norms = {"erik hjalmarsson", "hjalmarsson erik"}
-    df = df[~df["player_norm"].isin(excluded_norms)].copy()
 
-    df["year"] = df["competition"].apply(year_from_competition)
-    return df
+def save_auth_session(auth_response):
+    session = getattr(auth_response, "session", None)
+    user = getattr(auth_response, "user", None)
+    if session:
+        st.session_state.access_token = session.access_token
+        st.session_state.refresh_token = session.refresh_token
+    st.session_state.user = user
 
-def add_performance(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
 
-    field_sizes = (
-        df.groupby("competition")["rank"]
-        .max()
-        .reset_index(name="field_size")
-    )
+def current_user_id():
+    return st.session_state.user.id if st.session_state.user else None
 
-    df = df.merge(field_sizes, on="competition", how="left")
-    df["performance_score"] = 1 - ((df["rank"] - 1) / (df["field_size"] - 1))
-    df["performance_score"] = df["performance_score"].fillna(1.0)
 
-    return df
+def current_user_email():
+    return getattr(st.session_state.user, "email", None) if st.session_state.user else None
 
-def compute_player_table(df: pd.DataFrame) -> pd.DataFrame:
-    dfp = add_performance(df)
 
-    # Top 5
-    top5 = (
-        dfp[dfp["rank"] <= 5]
-        .groupby("player_norm")
-        .size()
-        .reset_index(name="top5_finishes")
-    )
+def is_admin():
+    email = current_user_email()
+    return bool(email and email.strip().lower() == ADMIN_EMAIL.strip().lower())
 
-    total = (
-        dfp.groupby("player_norm")
-        .size()
-        .reset_index(name="starts")
-    )
 
-    search_key = (
-        dfp.groupby("player_norm")["player_search_key"]
-        .first()
-        .reset_index(name="player_search_key")
-    )
+def clear_round_state():
+    st.session_state.current_round_id = None
+    st.session_state.current_course_id = None
+    st.session_state.current_holes = []
+    st.session_state.current_hole_pos = 0
+    st.session_state.current_round_holes_map = {}
+    st.session_state.current_round_shots_map = {}
 
-    base = total.merge(top5, on="player_norm", how="left").fillna({"top5_finishes": 0})
-    base["top5_rate"] = base["top5_finishes"] / base["starts"]
 
-    # Perusluvut
-    agg = (
-        dfp.groupby("player_norm")
-        .agg(
-            player=("player", "first"),
-            tournaments=("competition", "count"),
-            avg_rank=("rank", "mean"),
-            best_rank=("rank", "min"),
-            avg_perf=("performance_score", "mean"),
-            std_perf=("performance_score", "std"),
-        )
-        .reset_index()
-    )
+def send_password_reset(email: str):
+    email = (email or "").strip()
+    if not email:
+        raise ValueError("Anna sähköpostiosoite.")
+    auth_obj = supabase.auth
+    if hasattr(auth_obj, "reset_password_for_email"):
+        return auth_obj.reset_password_for_email(email)
+    if hasattr(auth_obj, "reset_password_email"):
+        return auth_obj.reset_password_email(email)
+    raise AttributeError("Salasanan palautusmetodia ei löytynyt Supabase-kirjastosta.")
 
-    agg["consistency"] = (1 - agg["std_perf"]).fillna(0)
+# -------------------------------------------------
+# Cachettavat haut
+# -------------------------------------------------
+@st.cache_data(ttl=60)
+def cached_get_profile(user_id):
+    rows = safe_data(supabase.table("profiles").select("*").eq("user_id", user_id).execute())
+    return rows[0] if rows else None
 
-    # Koko historian trendi + nykykunto
-    trend_rows = []
-    for pn, sub in dfp.sort_values("competition").groupby("player_norm"):
-        y = sub["performance_score"].to_numpy()
+@st.cache_data(ttl=60)
+def cached_get_all_courses():
+    try:
+        return safe_data(supabase.table("courses").select("*").order("name").execute())
+    except Exception:
+        return []
 
-        if len(y) >= 3:
-            x = np.arange(len(y))
-            trend_slope = np.polyfit(x, y, 1)[0]
-        else:
-            trend_slope = 0.0
+@st.cache_data(ttl=60)
+def cached_get_course(course_id):
+    rows = safe_data(supabase.table("courses").select("*").eq("id", course_id).execute())
+    return rows[0] if rows else None
 
-        current_form = float(np.mean(y[-5:])) if len(y) else np.nan
+@st.cache_data(ttl=60)
+def cached_get_course_holes(course_id):
+    return safe_data(supabase.table("course_holes").select("*").eq("course_id", course_id).order("hole_number").execute())
 
-        trend_rows.append((pn, trend_slope, current_form))
+@st.cache_data(ttl=30)
+def cached_get_rounds(user_id):
+    return safe_data(supabase.table("rounds").select("*").eq("user_id", user_id).order("played_at", desc=True).execute())
 
-    trend_df = pd.DataFrame(
-        trend_rows,
-        columns=["player_norm", "trend_slope", "current_form"]
-    )
 
-    out = agg.merge(base, on="player_norm", how="left").merge(trend_df, on="player_norm", how="left")
-    out = out.merge(search_key, on="player_norm", how="left")
+def clear_app_caches():
+    cached_get_profile.clear()
+    cached_get_all_courses.clear()
+    cached_get_course.clear()
+    cached_get_course_holes.clear()
+    cached_get_rounds.clear()
 
-    # Vuosikohtaiset kisamäärät
-    yearly = (
-        dfp.groupby(["player_norm", "year"])["competition"]
-        .nunique()
-        .reset_index(name="starts_year")
-    )
+# -------------------------------------------------
+# Profiilit
+# -------------------------------------------------
+def ensure_profile_exists(user_id, display_name):
+    rows = safe_data(supabase.table("profiles").select("user_id, display_name").eq("user_id", user_id).execute())
+    wanted = (display_name or "Pelaaja").strip() or "Pelaaja"
+    if not rows:
+        supabase.table("profiles").insert({"user_id": user_id, "display_name": wanted}).execute()
+    elif rows[0].get("display_name") != wanted:
+        supabase.table("profiles").update({"display_name": wanted}).eq("user_id", user_id).execute()
+    clear_app_caches()
 
-    ypivot = yearly.pivot(index="player_norm", columns="year", values="starts_year").fillna(0).reset_index()
-    ypivot.columns = [
-        f"starts_{int(c)}" if isinstance(c, (int, float)) and not pd.isna(c) else c
-        for c in ypivot.columns
-    ]
 
-    out = out.merge(ypivot, on="player_norm", how="left")
+def get_profile(user_id):
+    return cached_get_profile(user_id)
 
-    # Kokonaisscore
-    out["score"] = (
-        0.45 * out["avg_perf"] +
-        0.20 * out["top5_rate"] +
-        0.20 * out["consistency"] +
-        0.15 * out["trend_slope"]
-    )
 
-    return out.sort_values("score", ascending=False)
-
-def player_timeseries(df: pd.DataFrame, player_norm: str) -> pd.DataFrame:
-    dfp = add_performance(df)
-    sub = dfp[dfp["player_norm"] == player_norm].sort_values("competition")
-    return sub[["competition", "rank", "performance_score", "year"]]
-
-# ---------- Load ----------
-df = load_data()
-
-# Jos haluat joskus sulkea kilpailuja pois, lisää tähän esim. [2409]
-exclude_ids = []
-if exclude_ids:
-    df = df[~df["competition"].isin(exclude_ids)].copy()
-
-if df.empty:
-    st.error(t("no_data"))
-    st.stop()
-
-players_table = compute_player_table(df)
-df_perf = add_performance(df)
-
-# ---------- Page ----------
-st.title(t("title"))
-
-tabs = st.tabs([
-    t("overview"),
-    t("player_search"),
-    t("rankings"),
-    t("trends"),
-    t("calculation")
-])
-
-# ---------- Overview ----------
-with tabs[0]:
-    st.markdown(f"## {t('overview')}")
-
-    total_players = df["player"].nunique()
-    total_competitions = df["competition"].nunique()
-    total_rows = len(df)
-
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.markdown(metric_card(t("players"), total_players), unsafe_allow_html=True)
-    with c2:
-        st.markdown(metric_card(t("competitions"), total_competitions), unsafe_allow_html=True)
-    with c3:
-        st.markdown(metric_card(t("rows"), total_rows), unsafe_allow_html=True)
-
-    best_score_row = players_table.sort_values("score", ascending=False).iloc[0]
-    most_active_row = players_table.sort_values("tournaments", ascending=False).iloc[0]
-    most_top5_row = players_table.sort_values(["top5_finishes", "top5_rate"], ascending=False).iloc[0]
-
-    st.markdown("### Nostoja")
-    c1, c2, c3 = st.columns(3)
-
-    with c1:
-        color = score_color(best_score_row["score"], metric_type="high")
-        value = f"{best_score_row['player']}<br><span style='font-size:1rem;'>Score {best_score_row['score']:.3f}</span>"
-        st.markdown(highlight_metric_card(t("top_player_now"), value, color), unsafe_allow_html=True)
-
-    with c2:
-        color = score_color(most_active_row["tournaments"], metric_type="high")
-        if LANG == "Suomi":
-            value = (
-                f"{most_active_row['player']}<br>"
-                f"<span style='font-size:1rem;'>{int(most_active_row['tournaments'])} kilpailua</span>"
-            )
-        else:
-            value = (
-                f"{most_active_row['player']}<br>"
-                f"<span style='font-size:1rem;'>{int(most_active_row['tournaments'])} competitions</span>"
-            )
-        st.markdown(highlight_metric_card(t("most_active_card"), value, color), unsafe_allow_html=True)
-
-    with c3:
-        color = score_color(most_top5_row["top5_rate"], metric_type="high")
-        if LANG == "Suomi":
-            value = (
-                f"{most_top5_row['player']}<br>"
-                f"<span style='font-size:1rem;'>{int(most_top5_row['top5_finishes'])} Top 5 -sijoitusta</span>"
-            )
-        else:
-            value = (
-                f"{most_top5_row['player']}<br>"
-                f"<span style='font-size:1rem;'>{int(most_top5_row['top5_finishes'])} Top-5 finishes</span>"
-            )
-        st.markdown(highlight_metric_card(t("most_top5_card"), value, color), unsafe_allow_html=True)
-
-    st.markdown("### Top 3")
-    c1, c2, c3 = st.columns(3)
-
-    with c1:
-        st.markdown(f"#### {t('score_home')}")
-        score_home = players_table.sort_values("score", ascending=False).head(3)
-        st.dataframe(
-            localize_columns(score_home[["player", "score", "best_rank"]]),
-            use_container_width=True
-        )
-
-    with c2:
-        st.markdown(f"#### {t('active_home')}")
-        active_home = players_table.sort_values("tournaments", ascending=False).head(3)
-        st.dataframe(
-            localize_columns(active_home[["player", "tournaments", "best_rank"]]),
-            use_container_width=True
-        )
-
-    with c3:
-        st.markdown(f"#### {t('top5_home')}")
-        top5_home = players_table.sort_values(["top5_finishes", "top5_rate"], ascending=False).head(3)
-        st.dataframe(
-            localize_columns(top5_home[["player", "top5_finishes", "top5_rate"]]),
-            use_container_width=True
-        )
-
-# ---------- Player Search ----------
-with tabs[1]:
-    st.markdown(f"## {t('player_search')}")
-
-    q = st.text_input(t("filter_name"), "")
-    if q:
-        qn = norm_name(q)
-        options = players_table[
-            players_table["player_search_key"].str.contains(qn, na=False)
-        ]["player"].tolist()
-        if not options:
-            options = players_table["player"].tolist()
-            st.info(t("no_matches"))
+def update_profile_name(user_id, display_name):
+    value = (display_name or "").strip()
+    if not value:
+        raise ValueError("Anna näkyvä nimi.")
+    existing = get_profile(user_id)
+    if existing:
+        supabase.table("profiles").update({"display_name": value}).eq("user_id", user_id).execute()
     else:
-        options = players_table["player"].tolist()
+        supabase.table("profiles").insert({"user_id": user_id, "display_name": value}).execute()
+    clear_app_caches()
 
-    chosen = st.selectbox(t("select_player"), options=options, index=0)
-    pn = players_table.loc[players_table["player"] == chosen, "player_norm"].iloc[0]
-    row = players_table[players_table["player_norm"] == pn].iloc[0]
 
-    c1, c2, c3 = st.columns(3)
-    c4, c5, c6 = st.columns(3)
+def get_display_name(user_id):
+    profile = get_profile(user_id)
+    if profile and profile.get("display_name"):
+        return profile["display_name"]
+    return "Pelaaja"
 
-    with c1:
-        st.markdown(metric_card(t("best_rank"), int(row["best_rank"])), unsafe_allow_html=True)
-    with c2:
-        st.markdown(metric_card(t("avg_rank"), f"{row['avg_rank']:.2f}"), unsafe_allow_html=True)
-    with c3:
-        st.markdown(metric_card(t("top5"), f"{int(row['top5_finishes'])} ({row['top5_rate']*100:.1f}%)"), unsafe_allow_html=True)
+# -------------------------------------------------
+# Kentät
+# -------------------------------------------------
+def get_all_courses():
+    return cached_get_all_courses()
 
-    with c4:
-        st.markdown(metric_card(t("consistency"), f"{row['consistency']:.3f}"), unsafe_allow_html=True)
-    with c5:
-        st.markdown(metric_card(t("trend"), f"{row['trend_slope']:+.4f}"), unsafe_allow_html=True)
-    with c6:
-        st.markdown(metric_card(t("current_form"), f"{row['current_form']:.3f}"), unsafe_allow_html=True)
 
-    # Dynaamiset vuosikortit
-    year_cols = [c for c in row.index if str(c).startswith("starts_")]
-    year_cols = sorted(year_cols, key=lambda x: int(str(x).split("_")[1]))
+def get_course(course_id):
+    return cached_get_course(course_id)
 
-    if year_cols:
-        st.markdown(f"### {t('starts_by_year')}")
-        year_cards_cols = st.columns(min(4, len(year_cols)))
-        for i, col in enumerate(year_cols):
-            year = col.split("_")[1]
-            label = f"Kisat {year}" if LANG == "Suomi" else f"Starts {year}"
-            with year_cards_cols[i % len(year_cards_cols)]:
-                st.markdown(metric_card(label, int(row.get(col, 0))), unsafe_allow_html=True)
 
-    ts = player_timeseries(df, pn)
+def get_course_holes(course_id):
+    return cached_get_course_holes(course_id)
 
-    st.markdown(f"### {t('player_trend')}")
-    st.line_chart(ts.set_index("competition")["performance_score"])
 
-    st.markdown(f"### {t('recent_results')}")
-    st.dataframe(
-        localize_columns(ts.tail(20)),
-        use_container_width=True
-    )
+def can_edit_course(course):
+    return bool(course and (is_admin() or course.get("owner_user_id") == current_user_id()))
 
-# ---------- Rankings ----------
-with tabs[2]:
-    st.markdown(f"## {t('rankings')}")
 
-    st.markdown(f"### {t('score_label')}")
-    st.dataframe(
-        localize_columns(
-            players_table.sort_values("score", ascending=False)[
-                ["player", "score", "avg_rank", "top5_rate", "consistency", "tournaments"]
-            ].head(50)
-        ),
-        use_container_width=True
-    )
+def update_course(course_id, name, location, surface):
+    supabase.table("courses").update({"name": name.strip(), "location": location.strip() or None, "surface": surface}).eq("id", course_id).execute()
+    clear_app_caches()
 
-    st.markdown(f"### {t('most_top5')}")
-    st.dataframe(
-        localize_columns(
-            players_table.sort_values("top5_finishes", ascending=False)[
-                ["player", "top5_finishes", "top5_rate", "tournaments", "best_rank", "consistency"]
-            ].head(50)
-        ),
-        use_container_width=True
-    )
 
-    st.markdown(f"### {t('best_avg_rank')}")
-    st.dataframe(
-        localize_columns(
-            players_table.sort_values("avg_rank", ascending=True)[
-                ["player", "avg_rank", "best_rank", "top5_rate", "consistency", "tournaments"]
-            ].head(50)
-        ),
-        use_container_width=True
-    )
+def update_course_hole(hole_id, hole_number, hole_name, is_ending_hole, has_obstacle):
+    supabase.table("course_holes").update({
+        "hole_number": int(hole_number),
+        "hole_name": hole_name.strip() or None,
+        "is_ending_hole": bool(is_ending_hole),
+        "is_lane_hole": not bool(is_ending_hole),
+        "has_obstacle": bool(has_obstacle),
+    }).eq("id", hole_id).execute()
 
-    st.markdown(f"### {t('most_active')}")
-    st.dataframe(
-        localize_columns(
-            players_table.sort_values("tournaments", ascending=False)[
-                ["player", "tournaments", "best_rank", "avg_rank", "top5_rate"]
-            ].head(50)
-        ),
-        use_container_width=True
-    )
 
-    st.markdown(f"### {t('long_term_dev')}")
-    ranking_query = st.text_input(t("search_players"), "")
+def replace_hole_order(edited_rows):
+    nums = [int(r["hole_number"]) for r in edited_rows]
+    if sorted(nums) != list(range(1, len(nums) + 1)):
+        raise ValueError("Ratanumeroiden pitää olla ilman duplikaatteja järjestyksessä 1..n.")
+    for row in edited_rows:
+        update_course_hole(row["id"], row["hole_number"], row["hole_name"], row["is_ending_hole"], row["has_obstacle"])
+    clear_app_caches()
 
-    overall_trend = players_table.sort_values("trend_slope", ascending=False).copy()
 
-    if ranking_query:
-        qn = norm_name(ranking_query)
-        overall_trend = overall_trend[
-            overall_trend["player_search_key"].str.contains(qn, na=False)
-        ].copy()
+def delete_course(course_id):
+    supabase.table("course_holes").delete().eq("course_id", course_id).execute()
+    supabase.table("courses").delete().eq("id", course_id).execute()
+    clear_app_caches()
 
-    st.dataframe(
-        localize_columns(
-            overall_trend[
-                ["player", "trend_slope", "current_form", "top5_rate", "consistency", "tournaments"]
-            ].head(100)
-        ),
-        use_container_width=True
-    )
+# -------------------------------------------------
+# Kierrokset ja aktiivisen kierroksen nopeutus
+# -------------------------------------------------
+def get_rounds(user_id):
+    return cached_get_rounds(user_id)
 
-# ---------- Trends ----------
-with tabs[3]:
-    st.markdown(f"## {t('comparison_trends')}")
 
-    options = players_table["player"].tolist()
-    selected = st.multiselect(t("select_players"), options=options, default=options[:2])
+def get_round(round_id):
+    rows = safe_data(supabase.table("rounds").select("*").eq("id", round_id).execute())
+    return rows[0] if rows else None
 
-    if selected:
-        chart_df = []
-        for p in selected:
-            pn = players_table.loc[players_table["player"] == p, "player_norm"].iloc[0]
-            sub = df_perf[df_perf["player_norm"] == pn].sort_values("competition")[
-                ["competition", "performance_score"]
-            ].copy()
-            sub["player"] = p
-            chart_df.append(sub)
 
-        if chart_df:
-            chart_df = pd.concat(chart_df, ignore_index=True)
-            pivot = chart_df.pivot(index="competition", columns="player", values="performance_score").sort_index()
-            st.line_chart(pivot)
+def fetch_round_holes(round_id):
+    return safe_data(supabase.table("round_holes").select("*").eq("round_id", round_id).order("hole_sequence_number").execute())
 
-# ---------- Calculations ----------
-with tabs[4]:
-    st.markdown(f"## {t('calculation')}")
 
-    if LANG == "Suomi":
-        st.markdown("""
-- **Paras sijoitus** = pienin rank  
-- **Sijoituskeskiarvo** = sijoitusten keskiarvo  
-- **Top 5** = montako kertaa rank ≤ 5  
-- **Top 5 -osuus** = top5 / starts  
-- **Performance score** = `1 − (rank−1)/(field_size−1)`  
-- **Tasaisuus** = `1 − std(performance_score)`  
-- **Trendi** = lineaarinen trendi performance_scorelle  
-- **Nykykunto** = viimeisten 5 kilpailun performance_score-keskiarvo  
-- **Eniten kilpailuja** = suurin kilpailumäärä  
-- **Pitkän aikavälin kehitys** = koko datan trendi  
-- **Vuosi** päätellään kilpailu-ID:n kahdesta ensimmäisestä numerosta  
-  - `24...` = 2024  
-  - `25...` = 2025  
-  - `26...` = 2026  
-  - `27...` = 2027  
-- **Score** = painotettu yhdistelmä:
-  - 45 % avg_perf
-  - 20 % top5_rate
-  - 20 % consistency
-  - 15 % trend_slope
-        """)
+def fetch_shots(round_hole_id):
+    return safe_data(supabase.table("shots").select("*").eq("round_hole_id", round_hole_id).order("shot_number").execute())
+
+
+def load_round_into_state(round_row):
+    holes = get_course_holes(round_row["course_id"])
+    rhs = fetch_round_holes(round_row["id"])
+    holes_map = {rh["hole_sequence_number"]: rh for rh in rhs}
+    shots_map = {}
+    for rh in rhs:
+        shots_map[rh["id"]] = fetch_shots(rh["id"])
+    st.session_state.current_round_id = round_row["id"]
+    st.session_state.current_course_id = round_row["course_id"]
+    st.session_state.current_holes = holes
+    st.session_state.current_hole_pos = min(len(rhs), len(holes))
+    st.session_state.current_round_holes_map = holes_map
+    st.session_state.current_round_shots_map = shots_map
+
+
+def update_round_status(round_id, status_value):
+    supabase.table("rounds").update({"status": status_value}).eq("id", round_id).execute()
+    clear_app_caches()
+
+
+def update_round_meta(round_id, round_type, notes, status_value=None):
+    payload = {"round_type": round_type, "notes": notes.strip() or None}
+    if status_value is not None:
+        payload["status"] = status_value
+    supabase.table("rounds").update(payload).eq("id", round_id).execute()
+    clear_app_caches()
+
+
+def delete_round(round_id):
+    rhs = fetch_round_holes(round_id)
+    for rh in rhs:
+        supabase.table("shots").delete().eq("round_hole_id", rh["id"]).execute()
+    supabase.table("round_holes").delete().eq("round_id", round_id).execute()
+    supabase.table("rounds").delete().eq("id", round_id).execute()
+    clear_app_caches()
+
+
+def upsert_round_hole(round_id, hole, total_strokes, notes, shot_rows):
+    existing = st.session_state.current_round_holes_map.get(hole["hole_number"])
+    payload = {
+        "round_id": round_id,
+        "course_hole_id": hole["id"],
+        "hole_sequence_number": hole["hole_number"],
+        "total_strokes": int(total_strokes),
+        "went_straight_in": int(total_strokes) == 1,
+        "notes": notes.strip() or None,
+    }
+    if existing:
+        rh_id = existing["id"]
+        supabase.table("round_holes").update(payload).eq("id", rh_id).execute()
+        supabase.table("shots").delete().eq("round_hole_id", rh_id).execute()
     else:
-        st.markdown("""
-- **Best rank** = lowest rank  
-- **Average rank** = mean rank  
-- **Top 5** = number of times rank ≤ 5  
-- **Top 5 rate** = top5 / starts  
-- **Performance score** = `1 − (rank−1)/(field_size−1)`  
-- **Consistency** = `1 − std(performance_score)`  
-- **Trend** = linear slope of performance_score  
-- **Current form** = mean performance_score of last 5 competitions  
-- **Most competitions** = highest competition count  
-- **Long-term development** = trend over the full dataset  
-- **Greta Wedman + Greta Sahlberg** are merged into one player shown as **Greta Sahlberg**  
-- **Year** is inferred from the first two digits of competition ID  
-  - `24...` = 2024  
-  - `25...` = 2025  
-  - `26...` = 2026  
-  - `27...` = 2027  
-- **Score** = weighted combination:
-  - 45% avg_perf
-  - 20% top5_rate
-  - 20% consistency
-  - 15% trend_slope
-        """)
+        res = supabase.table("round_holes").insert(payload).execute()
+        rh_id = res.data[0]["id"]
+        existing = {"id": rh_id, **payload}
 
-st.markdown("---")
-st.caption(t("footer"))
+    if int(total_strokes) == 1:
+        shots_rows = [{
+            "round_hole_id": rh_id,
+            "shot_number": 1,
+            "went_in": True,
+            "went_through": False,
+            "hit_obstacle": False,
+            "direction_error": "none",
+            "speed_error": "none",
+        }]
+        supabase.table("shots").insert(shots_rows).execute()
+    else:
+        shots_rows = []
+        for row in shot_rows:
+            item = row.copy()
+            item["round_hole_id"] = rh_id
+            shots_rows.append(item)
+        if shots_rows:
+            if not shots_rows[-1]["went_in"]:
+                shots_rows[-1]["went_in"] = True
+            supabase.table("shots").insert(shots_rows).execute()
 
+    existing.update({"id": rh_id})
+    st.session_state.current_round_holes_map[hole["hole_number"]] = existing
+    st.session_state.current_round_shots_map[rh_id] = shots_rows if int(total_strokes) > 1 else [{
+        "shot_number": 1,
+        "went_in": True,
+        "went_through": False,
+        "hit_obstacle": False,
+        "direction_error": "none",
+        "speed_error": "none",
+    }]
+    clear_app_caches()
+
+# -------------------------------------------------
+# Historia/analyysi
+# -------------------------------------------------
+def get_course_hole_averages(user_id, course_id):
+    rounds = [r for r in get_rounds(user_id) if r.get("course_id") == course_id and r.get("status") == "completed"]
+    if not rounds:
+        return []
+    all_rhs = []
+    for rnd in rounds:
+        all_rhs.extend(fetch_round_holes(rnd["id"]))
+    if not all_rhs:
+        return []
+    hole_map = {h["id"]: h["hole_number"] for h in get_course_holes(course_id)}
+    rows = [{"Rata": hole_map.get(rh["course_hole_id"], rh.get("hole_sequence_number")), "Lyönnit": rh.get("total_strokes", 0)} for rh in all_rhs]
+    df = pd.DataFrame(rows)
+    grouped = df.groupby("Rata", as_index=False)["Lyönnit"].mean().sort_values("Rata")
+    grouped["Lyönnit"] = grouped["Lyönnit"].round(2)
+    return grouped.to_dict("records")
+
+
+def filter_rounds_for_stats(rounds, surface_filter, date_from, date_to, type_filter):
+    courses = {c["id"]: c for c in get_all_courses()}
+    filtered = []
+    for rnd in rounds:
+        if rnd.get("status") != "completed":
+            continue
+        if type_filter != "kaikki" and rnd.get("round_type", "harjoitus") != type_filter:
+            continue
+        played_date = to_date(rnd.get("played_at"))
+        if date_from and played_date and played_date < date_from:
+            continue
+        if date_to and played_date and played_date > date_to:
+            continue
+        course = courses.get(rnd["course_id"])
+        if surface_filter != "kaikki" and course and course.get("surface") != surface_filter:
+            continue
+        filtered.append((rnd, course))
+    return filtered
+
+
+def get_analysis_metrics(user_id, surface_filter="kaikki", date_from=None, date_to=None, type_filter="kaikki"):
+    rounds = get_rounds(user_id)
+    rounds_with_course = filter_rounds_for_stats(rounds, surface_filter, date_from, date_to, type_filter)
+    if not rounds_with_course:
+        return None
+    all_rhs = []
+    ending_attempts = []
+    direction_counts = {"left": 0, "right": 0}
+    speed_counts = {"too_slow": 0, "too_hard": 0}
+    eterniitti_scores = []
+    for rnd, course in rounds_with_course:
+        rhs = fetch_round_holes(rnd["id"])
+        for rh in rhs:
+            all_rhs.append(rh)
+            for shot in fetch_shots(rh["id"]):
+                if shot.get("direction_error") == "left":
+                    direction_counts["left"] += 1
+                elif shot.get("direction_error") == "right":
+                    direction_counts["right"] += 1
+                if shot.get("speed_error") == "too_slow":
+                    speed_counts["too_slow"] += 1
+                elif shot.get("speed_error") == "too_hard":
+                    speed_counts["too_hard"] += 1
+            ch = safe_data(supabase.table("course_holes").select("is_ending_hole").eq("id", rh["course_hole_id"]).execute())
+            if ch and ch[0].get("is_ending_hole"):
+                ending_attempts.append(rh.get("total_strokes", 0))
+            if course and course.get("surface") == "eterniitti":
+                score = rh.get("total_strokes", 0)
+                if 1 <= score <= 7:
+                    eterniitti_scores.append(score)
+    metrics = {
+        "piikki": round(pd.Series([1 if rh.get("went_straight_in") else 0 for rh in all_rhs]).mean() * 100, 1),
+        "attempts_avg": round(pd.Series(ending_attempts).mean(), 2) if ending_attempts else None,
+        "pitkat": round((pd.Series(ending_attempts) >= 4).mean() * 100, 1) if ending_attempts else None,
+        "left_count": direction_counts["left"],
+        "right_count": direction_counts["right"],
+        "slow_count": speed_counts["too_slow"],
+        "hard_count": speed_counts["too_hard"],
+        "eterniitti": None,
+    }
+    if eterniitti_scores:
+        total = len(eterniitti_scores)
+        piikit = sum(1 for s in eterniitti_scores if s == 1)
+        twos = sum(1 for s in eterniitti_scores if s == 2)
+        bads = sum(1 for s in eterniitti_scores if 3 <= s <= 7)
+        non_piikki = [s for s in eterniitti_scores if s > 1]
+        rescued = sum(1 for s in non_piikki if s == 2)
+        continues = sum(1 for s in non_piikki if 3 <= s <= 7)
+        non_total = len(non_piikki)
+        metrics["eterniitti"] = {
+            "piikki_pct": round((piikit / total) * 100, 1),
+            "kakkonen_pct": round((twos / total) * 100, 1),
+            "three_to_seven_pct": round((bads / total) * 100, 1),
+            "pelastettu_kakkoseen_pct": round((rescued / non_total) * 100, 1) if non_total else None,
+            "jatkuu_huono_pct": round((continues / non_total) * 100, 1) if non_total else None,
+        }
+    return metrics
+
+# -----------------------------
+# Views
+# -----------------------------
+def render_topbar(user_id):
+    profile = get_profile(user_id)
+    left, middle, right = st.columns([4, 3, 1])
+    with left:
+        title_block("Bankontoret", f"Kirjautunut: {(profile or {}).get('display_name') or 'Pelaaja'}")
+    with middle:
+        st.session_state.view = st.radio(
+            "Näkymä",
+            ["Etusivu", "Kentät", "Kierros", "Historia", "Analyysi", "Profiili"],
+            horizontal=True,
+            label_visibility="collapsed",
+            index=["Etusivu", "Kentät", "Kierros", "Historia", "Analyysi", "Profiili"].index(st.session_state.view),
+        )
+    with right:
+        if st.button("Kirjaudu ulos"):
+            try:
+                supabase.auth.sign_out()
+            except Exception:
+                pass
+            st.session_state.access_token = None
+            st.session_state.refresh_token = None
+            st.session_state.user = None
+            clear_round_state()
+            st.rerun()
+
+
+def auth_view():
+    st.title("Bankontoret")
+    st.caption("Kirjaudu tai luo käyttäjä. Jos sähköpostivahvistus ei toimi, korjaa Supabasen Auth-asetusten Site URL / Redirect URL.")
+    col1, col2 = st.columns(2)
+    with col1:
+        title_block("Kirjaudu")
+        with st.form("login"):
+            email = st.text_input("Sähköposti")
+            password = st.text_input("Salasana", type="password")
+            if st.form_submit_button("Kirjaudu"):
+                try:
+                    response = supabase.auth.sign_in_with_password({"email": email, "password": password})
+                    save_auth_session(response)
+                    ensure_profile_exists(current_user_id(), email.split("@")[0])
+                    st.rerun()
+                except Exception as e:
+                    ui_error("Kirjautuminen epäonnistui.", e)
+    with col2:
+        title_block("Luo käyttäjä")
+        with st.form("signup"):
+            name = st.text_input("Näyttönimi")
+            email = st.text_input("Sähköposti", key="signup_email")
+            password = st.text_input("Salasana", type="password", key="signup_password")
+            if st.form_submit_button("Luo käyttäjä"):
+                try:
+                    supabase.auth.sign_up({"email": email, "password": password, "options": {"data": {"display_name": name}}})
+                    st.success("Käyttäjä luotu. Jos vahvistuslinkki ei toimi, korjaa se Supabasessa ennen käyttöönottoa.")
+                except Exception as e:
+                    ui_error("Käyttäjän luonti epäonnistui.", e)
+        with st.expander("Unohtuiko salasana?"):
+            with st.form("reset_password_form"):
+                reset_email = st.text_input("Sähköposti salasanan palautusta varten", key="reset_email")
+                if st.form_submit_button("Lähetä palautuslinkki"):
+                    try:
+                        send_password_reset(reset_email)
+                        st.success("Jos sähköposti löytyy järjestelmästä, palautuslinkki on lähetetty.")
+                    except Exception as e:
+                        ui_error("Salasanan palautus ei onnistunut.", e)
+
+
+def render_dashboard(user_id):
+    title_block("Etusivu", "Nyt renderöidään vain tämä yksi näkymä kerrallaan, mikä nopeuttaa käyttöä selvästi.")
+    rounds = get_rounds(user_id)
+    courses = get_all_courses()
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Kentät", len(courses))
+    c2.metric("Valmiit kierrokset", len([r for r in rounds if r.get("status") == "completed"]))
+    c3.metric("Keskeneräiset kierrokset", len([r for r in rounds if r.get("status") == "draft"]))
+    st.info("Aloita näin: 1) lisää tai tarkista kenttä 2) aloita kierros 3) tallenna keskeneräinen tarvittaessa 4) katso historia ja analyysi.")
+
+
+def render_courses(user_id):
+    title_block("Kentät", "Kaikki kirjautuneet näkevät samat kentät. Kentän omistaja tai pääkäyttäjä voi muokata ja poistaa kentän.")
+    all_courses = get_all_courses()
+    with st.expander("Luo uusi kenttä"):
+        with st.form("new_course", clear_on_submit=True):
+            course_name = st.text_input("Kentän nimi")
+            location = st.text_input("Sijainti (valinnainen)")
+            surface = st.selectbox("Alusta", SURFACE_OPTIONS)
+            if st.form_submit_button("Tallenna kenttä"):
+                if not course_name.strip():
+                    st.error("Anna kentälle nimi.")
+                elif any((c.get("name") or "").strip().lower() == course_name.strip().lower() for c in all_courses):
+                    st.warning("Kenttä löytyy jo. Käytä olemassa olevaa kenttää listalta.")
+                else:
+                    try:
+                        supabase.table("courses").insert({"name": course_name.strip(), "location": location.strip() or None, "surface": surface, "owner_user_id": user_id}).execute()
+                        clear_app_caches()
+                        st.success("Kenttä tallennettu.")
+                        st.rerun()
+                    except Exception as e:
+                        ui_error("Kentän tallennus epäonnistui.", e)
+    if not all_courses:
+        st.info("Ei vielä kenttiä.")
+        return
+    course_map = {f"{c['name']} ({c.get('surface') or 'ei alustaa'})": c for c in all_courses}
+    selected_label = st.selectbox("Valitse kenttä", list(course_map.keys()))
+    course = course_map[selected_label]
+    holes = get_course_holes(course["id"])
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Alusta", course.get("surface") or "–")
+    c2.metric("Par", PAR_BY_SURFACE.get(course.get("surface"), "–"))
+    c3.metric("Sijainti", course.get("location") or "–")
+    c4.metric("Ratoja", f"{len(holes)}/18")
+    if holes:
+        st.dataframe(pd.DataFrame([{"#": h["hole_number"], "Nimi": h.get("hole_name") or "", "Tyyppi": "Päättyvä" if h.get("is_ending_hole") else "Kenttärata", "Esteellinen": "Kyllä" if h.get("has_obstacle") else "Ei"} for h in holes]), use_container_width=True, hide_index=True)
+    else:
+        st.info("Kentällä ei ole vielä ratoja.")
+    if len(holes) < MAX_HOLES:
+        with st.expander("Lisää uusi rata"):
+            next_no = len(holes) + 1
+            with st.form("new_hole", clear_on_submit=True):
+                st.text_input("Radan numero", value=str(next_no), disabled=True)
+                hole_name = st.text_input("Radan nimi (valinnainen)")
+                hole_type = st.radio("Ratatyyppi", ["Päättyvä rata", "Kenttärata"], horizontal=True)
+                has_obstacle = st.checkbox("Esteellinen")
+                if st.form_submit_button(f"Tallenna rata {next_no}/18"):
+                    try:
+                        supabase.table("course_holes").insert({"course_id": course["id"], "hole_number": next_no, "hole_name": hole_name.strip() or None, "is_ending_hole": hole_type == "Päättyvä rata", "is_lane_hole": hole_type == "Kenttärata", "has_obstacle": bool(has_obstacle)}).execute()
+                        clear_app_caches()
+                        st.success(f"Rata {next_no}/18 tallennettu.")
+                        st.rerun()
+                    except Exception as e:
+                        ui_error("Radan tallennus epäonnistui.", e)
+    if can_edit_course(course):
+        st.markdown("### Muokkaa / poista kenttä")
+        with st.expander("Muokkaa tätä kenttää"):
+            with st.form(f"edit_course_{course['id']}"):
+                new_name = st.text_input("Kentän nimi", value=course.get("name") or "")
+                new_location = st.text_input("Sijainti", value=course.get("location") or "")
+                new_surface = st.selectbox("Alusta", SURFACE_OPTIONS, index=SURFACE_OPTIONS.index(course.get("surface")) if course.get("surface") in SURFACE_OPTIONS else 0)
+                edited = []
+                for hole in holes:
+                    st.markdown(f"**Nykyinen rata {hole['hole_number']}**")
+                    ec1, ec2, ec3 = st.columns(3)
+                    with ec1:
+                        hole_number = st.number_input(f"Ratanumero #{hole['id']}", min_value=1, max_value=18, value=int(hole['hole_number']), step=1, key=f"edit_num_{hole['id']}")
+                    with ec2:
+                        hole_name = st.text_input(f"Radan nimi #{hole['id']}", value=hole.get("hole_name") or "", key=f"edit_name_{hole['id']}")
+                    with ec3:
+                        hole_type = st.radio(f"Ratatyyppi #{hole['id']}", ["Päättyvä rata", "Kenttärata"], horizontal=True, index=0 if hole.get("is_ending_hole") else 1, key=f"edit_type_{hole['id']}")
+                    has_obstacle = st.checkbox(f"Esteellinen #{hole['id']}", value=bool(hole.get("has_obstacle")), key=f"edit_obs_{hole['id']}")
+                    edited.append({"id": hole["id"], "hole_number": int(hole_number), "hole_name": hole_name, "is_ending_hole": hole_type == "Päättyvä rata", "has_obstacle": bool(has_obstacle)})
+                    st.divider()
+                if st.form_submit_button("Tallenna kentän muutokset"):
+                    try:
+                        update_course(course["id"], new_name, new_location, new_surface)
+                        replace_hole_order(edited)
+                        st.success("Kenttä päivitetty.")
+                        st.rerun()
+                    except Exception as e:
+                        ui_error("Kentän päivitys epäonnistui.", e)
+        st.markdown("### Poista tämä kenttä")
+        confirm_delete_course = st.checkbox("Ymmärrän, että kentän poisto voi epäonnistua, jos kentällä on jo kierroksia.", key=f"confirm_delete_course_{course['id']}")
+        if st.button("Poista tämä kenttä", type="secondary", disabled=not confirm_delete_course, key=f"delete_course_btn_{course['id']}"):
+            try:
+                delete_course(course["id"])
+                st.success("Kenttä poistettu.")
+                st.rerun()
+            except Exception as e:
+                ui_error("Kentän poisto epäonnistui. Todennäköinen syy: kenttään liittyy jo tallennettuja kierroksia.", e)
+
+
+def render_draft_rounds(user_id):
+    rounds = [r for r in get_rounds(user_id) if r.get("status") == "draft"]
+    if not rounds:
+        return
+    courses = {c["id"]: c for c in get_all_courses()}
+    title_block("Jatka keskeneräistä kierrosta")
+    labels, label_to_round = [], {}
+    for rnd in rounds:
+        rhs = fetch_round_holes(rnd["id"])
+        course = courses.get(rnd["course_id"], {})
+        label = f"{rnd.get('played_at')} – {course.get('name', 'Tuntematon')} ({len(rhs)}/18)"
+        labels.append(label)
+        label_to_round[label] = rnd
+    selected = st.selectbox("Valitse keskeneräinen kierros", labels)
+    c1, c2 = st.columns(2)
+    if c1.button("Jatka valittua kierrosta"):
+        load_round_into_state(label_to_round[selected])
+        st.rerun()
+    if c2.button("Poista valittu keskeneräinen kierros"):
+        try:
+            delete_round(label_to_round[selected]["id"])
+            st.success("Keskeneräinen kierros poistettu.")
+            st.rerun()
+        except Exception as e:
+            ui_error("Kierroksen poisto epäonnistui.", e)
+
+
+def render_current_round_controls(round_id):
+    c1, c2 = st.columns(2)
+    if c1.button("Tallenna kierros keskeneräisenä"):
+        try:
+            update_round_status(round_id, "draft")
+            clear_round_state()
+            st.success("Kierros tallennettu keskeneräisenä.")
+            st.rerun()
+        except Exception as e:
+            ui_error("Kierroksen tallennus epäonnistui.", e)
+    if c2.button("Poista tämä kierros", type="secondary"):
+        try:
+            delete_round(round_id)
+            clear_round_state()
+            st.success("Kierros poistettu.")
+            st.rerun()
+        except Exception as e:
+            ui_error("Kierroksen poisto epäonnistui.", e)
+
+
+def render_new_round(user_id):
+    title_block("Kierros", "Tässä näkymässä haetaan vain kierrokseen tarvittava data, jotta syöttö olisi aiempaa nopeampaa.")
+    courses = get_all_courses()
+    if not courses:
+        st.info("Luo ensin kenttä Kentät-välilehdellä.")
+        return
+    render_draft_rounds(user_id)
+    st.divider()
+    course_map = {f"{c['name']} ({c.get('surface') or 'ei alustaa'})": c for c in courses}
+    if st.session_state.current_round_id is None:
+        with st.form("start_round_form"):
+            selected_label = st.selectbox("Kenttä", list(course_map.keys()))
+            selected_course = course_map[selected_label]
+            holes = get_course_holes(selected_course["id"])
+            played_at = st.date_input("Päivä", value=date.today())
+            round_type = st.selectbox("Kierroksen tyyppi", ROUND_TYPE_OPTIONS)
+            notes = st.text_area("Muistiinpanot (valinnainen)")
+            can_start = len(holes) == 18
+            if not can_start:
+                st.warning(f"Tällä kentällä on {len(holes)}/18 rataa.")
+            if st.form_submit_button("Aloita kierros", disabled=not can_start):
+                try:
+                    payload = {"user_id": user_id, "course_id": selected_course["id"], "played_at": played_at.isoformat(), "visibility": "private", "notes": notes.strip() or None, "round_type": round_type, "status": "draft"}
+                    result = supabase.table("rounds").insert(payload).execute()
+                    st.session_state.current_round_id = result.data[0]["id"]
+                    st.session_state.current_course_id = selected_course["id"]
+                    st.session_state.current_holes = holes
+                    st.session_state.current_hole_pos = 0
+                    st.session_state.current_round_holes_map = {}
+                    st.session_state.current_round_shots_map = {}
+                    clear_app_caches()
+                    st.rerun()
+                except Exception as e:
+                    ui_error("Kierroksen aloitus epäonnistui.", e)
+        return
+    current_round = get_round(st.session_state.current_round_id)
+    if not current_round:
+        clear_round_state()
+        st.warning("Kierrosta ei löytynyt enää.")
+        st.rerun()
+        return
+    render_current_round_controls(current_round["id"])
+    st.divider()
+    holes = st.session_state.current_holes
+    pos = st.session_state.current_hole_pos
+    progress = min((pos) / len(holes), 1.0) if holes else 0
+    st.progress(progress, text=f"Vaihe {min(pos+1, len(holes))}/{len(holes)}")
+    if pos >= len(holes):
+        total = sum(r.get("total_strokes", 0) for r in st.session_state.current_round_holes_map.values())
+        course = get_course(st.session_state.current_course_id)
+        st.success("Kierros valmis")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Tulos", total)
+        c2.metric("Alusta", course.get("surface") if course else "–")
+        c3.metric("Par", PAR_BY_SURFACE.get(course.get("surface"), "–") if course else "–")
+        render_band_badge(course.get("surface") if course else None, total)
+        if st.button("Päätä kierros valmiina", type="primary"):
+            try:
+                update_round_status(st.session_state.current_round_id, "completed")
+                clear_round_state()
+                st.success("Kierros tallennettu valmiina.")
+                st.rerun()
+            except Exception as e:
+                ui_error("Kierroksen päättäminen epäonnistui.", e)
+        return
+    hole = holes[pos]
+    existing = st.session_state.current_round_holes_map.get(hole["hole_number"])
+    hole_id = hole["id"]
+    title_block(f"Rata {hole['hole_number']}", hole.get("hole_name") or None)
+    st.write(f"**Tyyppi:** {'Päättyvä rata' if hole.get('is_ending_hole') else 'Kenttärata'}")
+    st.write(f"**Esteellinen:** {'Kyllä' if hole.get('has_obstacle') else 'Ei'}")
+    default_strokes = existing.get("total_strokes", 1) if existing else 1
+    strokes = st.radio("Lyönnit", list(range(1, 8)), horizontal=True, index=list(range(1, 8)).index(default_strokes if default_strokes in range(1, 8) else 1), key=f"strokes_{hole_id}_{pos}")
+    notes = st.text_input("Muistiinpanot radasta (valinnainen)", value=existing.get("notes", "") if existing else "", key=f"notes_{hole_id}_{pos}")
+    existing_shots = st.session_state.current_round_shots_map.get(existing["id"], []) if existing else []
+    existing_shot_map = {s["shot_number"]: s for s in existing_shots}
+    shot_rows = []
+    if int(strokes) > 1:
+        st.markdown("#### Lyöntikortit")
+        for i in range(1, int(strokes) + 1):
+            prev = existing_shot_map.get(i, {})
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                went_in = st.checkbox("Sisään", value=prev.get("went_in", i == int(strokes)), key=f"in_{hole_id}_{pos}_{i}")
+            with c2:
+                went_through = st.checkbox("Läpi", value=prev.get("went_through", False), key=f"through_{hole_id}_{pos}_{i}") if hole.get("is_lane_hole") else False
+            with c3:
+                hit_obstacle = st.checkbox("Este", value=prev.get("hit_obstacle", False), key=f"obst_{hole_id}_{pos}_{i}") if hole.get("has_obstacle") else False
+            c4, c5 = st.columns(2)
+            with c4:
+                direction_error = st.radio("Suunta", ["none", "left", "right"], horizontal=True, index=["none", "left", "right"].index(prev.get("direction_error", "none")), key=f"dir_{hole_id}_{pos}_{i}", format_func=lambda x: {"none": "ei", "left": "vasen", "right": "oikea"}[x])
+            with c5:
+                speed_error = st.radio("Vauhti", ["none", "too_slow", "too_hard"], horizontal=True, index=["none", "too_slow", "too_hard"].index(prev.get("speed_error", "none")), key=f"spd_{hole_id}_{pos}_{i}", format_func=lambda x: {"none": "ei", "too_slow": "hidas", "too_hard": "liian luja"}[x])
+            shot_rows.append({"shot_number": i, "went_in": bool(went_in), "went_through": bool(went_through), "hit_obstacle": bool(hit_obstacle), "direction_error": direction_error, "speed_error": speed_error})
+            st.divider()
+    c_prev, c_skip, c_save = st.columns(3)
+    if c_prev.button("⬅ Edellinen rata", disabled=(pos == 0)):
+        st.session_state.current_hole_pos = max(0, pos - 1)
+        st.rerun()
+    if c_save.button("Tallenna rata", type="primary"):
+        try:
+            upsert_round_hole(st.session_state.current_round_id, hole, strokes, notes, shot_rows)
+            st.session_state.current_hole_pos = min(len(holes), pos + 1)
+            st.rerun()
+        except Exception as e:
+            ui_error("Radan tallennus epäonnistui.", e)
+    if c_skip.button("Peruuta tämän radan tiedot"):
+        st.rerun()
+
+
+def render_history(user_id):
+    title_block("Historia", "Suodata päivämäärän, alustan, tyypin ja tilan mukaan.")
+    rounds = get_rounds(user_id)
+    if not rounds:
+        st.info("Ei vielä tallennettuja kierroksia.")
+        return
+    courses = {c["id"]: c for c in get_all_courses()}
+    f1, f2, f3, f4, f5 = st.columns(5)
+    date_from = f1.date_input("Alkaen", value=None)
+    date_to = f2.date_input("Asti", value=None)
+    surface_filter = f3.selectbox("Alusta", ["kaikki"] + SURFACE_OPTIONS)
+    type_filter = f4.selectbox("Tyyppi", ["kaikki"] + ROUND_TYPE_OPTIONS)
+    status_filter = f5.selectbox("Kierroksen tila", ["kaikki"] + [STATUS_LABELS[s] for s in ROUND_STATUS_OPTIONS])
+    rows = []
+    for rnd in rounds:
+        course = courses.get(rnd["course_id"], {})
+        played_date = to_date(rnd.get("played_at"))
+        if date_from and played_date and played_date < date_from:
+            continue
+        if date_to and played_date and played_date > date_to:
+            continue
+        if surface_filter != "kaikki" and course.get("surface") != surface_filter:
+            continue
+        if type_filter != "kaikki" and rnd.get("round_type", "harjoitus") != type_filter:
+            continue
+        if status_filter != "kaikki" and format_status(rnd.get("status", "completed")) != status_filter:
+            continue
+        rhs = fetch_round_holes(rnd["id"])
+        total = sum(r.get("total_strokes", 0) for r in rhs)
+        color = band_for_score(course.get("surface"), total)[1]
+        rows.append({"round_id": rnd["id"], "Päivä": rnd.get("played_at"), "Kenttä": course.get("name", "Tuntematon"), "Tyyppi": rnd.get("round_type", "harjoitus"), "Tila": format_status(rnd.get("status", "completed")), "Alusta": course.get("surface") or "–", "Par": PAR_BY_SURFACE.get(course.get("surface"), "–"), "Ratoja": len(rhs), "Tulos": total, "Muistiinpanot": rnd.get("notes") or "", "color": color})
+    if not rows:
+        st.info("Ei hakuehdoilla löytyviä kierroksia.")
+        return
+    header = "<table style='width:100%; border-collapse:collapse'><tr><th align='left'>Päivä</th><th align='left'>Kenttä</th><th align='left'>Tyyppi</th><th align='left'>Tila</th><th align='left'>Alusta</th><th align='left'>Par</th><th align='left'>Ratoja</th><th align='left'>Tulos</th><th align='left'>Muistiinpanot</th></tr>"
+    body = ""
+    for row in rows:
+        body += f"<tr><td>{row['Päivä']}</td><td>{row['Kenttä']}</td><td>{row['Tyyppi']}</td><td>{row['Tila']}</td><td>{row['Alusta']}</td><td>{row['Par']}</td><td>{row['Ratoja']}</td><td style='color:{row['color']}; font-weight:700'>{row['Tulos']}</td><td>{row['Muistiinpanot']}</td></tr>"
+    st.markdown(header + body + "</table>", unsafe_allow_html=True)
+    df = pd.DataFrame(rows)
+    completed_df = df[df["Tila"] == STATUS_LABELS["completed"]]
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Valmiiden kierrosten keskiarvo", round(completed_df["Tulos"].mean(), 2) if not completed_df.empty else "–")
+    prac = completed_df[completed_df["Tyyppi"] == "harjoitus"]
+    comp = completed_df[completed_df["Tyyppi"] == "kisa"]
+    c2.metric("Valmiit harjoituskierrokset", round(prac["Tulos"].mean(), 2) if not prac.empty else "–")
+    c3.metric("Valmiit kisakierrokset", round(comp["Tulos"].mean(), 2) if not comp.empty else "–")
+    st.markdown("### Muokkaa tai poista tallennettu kierros")
+    round_map = {f"{row['Päivä']} – {row['Kenttä']} ({row['Tulos']})": row["round_id"] for row in rows}
+    selected_label = st.selectbox("Valitse kierros", list(round_map.keys()))
+    selected_round_id = round_map[selected_label]
+    round_record = get_round(selected_round_id)
+    rhs = fetch_round_holes(selected_round_id)
+    if round_record and round_record.get("status") == "draft" and st.button("Jatka tätä keskeneräistä kierrosta"):
+        load_round_into_state(round_record)
+        st.session_state.view = "Kierros"
+        st.rerun()
+    with st.form("edit_round_form"):
+        round_type = st.selectbox("Kierroksen tyyppi", ROUND_TYPE_OPTIONS, index=ROUND_TYPE_OPTIONS.index(round_record.get("round_type", "harjoitus")) if round_record.get("round_type", "harjoitus") in ROUND_TYPE_OPTIONS else 0)
+        status_ui = st.selectbox("Kierroksen tila", [STATUS_LABELS[s] for s in ROUND_STATUS_OPTIONS], index=ROUND_STATUS_OPTIONS.index(round_record.get("status", "completed")) if round_record.get("status", "completed") in ROUND_STATUS_OPTIONS else 0)
+        notes = st.text_area("Kierroksen muistiinpanot", value=round_record.get("notes") or "")
+        edited_scores = {}
+        for rh in rhs:
+            edited_scores[rh["id"]] = st.number_input(f"Rata {rh.get('hole_sequence_number')} – lyönnit", min_value=1, max_value=20, value=int(rh.get("total_strokes", 1)), step=1, key=f"edit_rh_{rh['id']}")
+        if st.form_submit_button("Tallenna muutokset"):
+            try:
+                update_round_meta(selected_round_id, round_type, notes, STATUS_LABEL_TO_VALUE[status_ui])
+                for rh in rhs:
+                    supabase.table("round_holes").update({"total_strokes": int(edited_scores[rh['id']]), "went_straight_in": int(edited_scores[rh['id']]) == 1}).eq("id", rh["id"]).execute()
+                clear_app_caches()
+                st.success("Kierros päivitetty.")
+                st.rerun()
+            except Exception as e:
+                ui_error("Kierroksen päivitys epäonnistui.", e)
+    if st.button("Poista valittu kierros", type="secondary"):
+        try:
+            delete_round(selected_round_id)
+            st.success("Kierros poistettu.")
+            st.rerun()
+        except Exception as e:
+            ui_error("Kierroksen poisto epäonnistui.", e)
+
+
+def render_analysis(user_id):
+    title_block("Analyysi", "Vain valmiit kierrokset huomioidaan analyysissä.")
+    a1, a2, a3, a4 = st.columns(4)
+    date_from = a1.date_input("Alkaen", value=None, key="analysis_from")
+    date_to = a2.date_input("Asti", value=None, key="analysis_to")
+    surface_filter = a3.selectbox("Alusta", ["kaikki"] + SURFACE_OPTIONS, key="analysis_surface")
+    type_filter = a4.selectbox("Tyyppi", ["kaikki"] + ROUND_TYPE_OPTIONS, key="analysis_type")
+    metrics = get_analysis_metrics(user_id, surface_filter=surface_filter, date_from=date_from, date_to=date_to, type_filter=type_filter)
+    if not metrics:
+        st.info("Analyysi näkyy, kun suodattimilla löytyy valmiita kierroksia.")
+        return
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Piikki %", f"{metrics['piikki']} %" if metrics['piikki'] is not None else "–")
+    c2.metric("Attempts (avg)", str(metrics['attempts_avg']) if metrics['attempts_avg'] is not None else "–")
+    c3.metric("Pitkät sarjat %", f"{metrics['pitkat']} %" if metrics['pitkat'] is not None else "–")
+    st.caption("Pitkät sarjat % = kuinka usein päättyvillä radoilla tarvittiin vähintään 4 lyöntiä.")
+    c4, c5, c6, c7 = st.columns(4)
+    c4.metric("Oikealle ohi", metrics['right_count'])
+    c5.metric("Vasemmalle ohi", metrics['left_count'])
+    c6.metric("Hitaat vauhtivirheet", metrics['slow_count'])
+    c7.metric("Liian lujat vauhtivirheet", metrics['hard_count'])
+    if metrics.get("eterniitti"):
+        et = metrics["eterniitti"]
+        st.markdown("### Eterniitti – piikin jälkeen")
+        e1, e2, e3, e4, e5 = st.columns(5)
+        e1.metric("Piikki %", f"{et['piikki_pct']} %")
+        e2.metric("Kakkonen %", f"{et['kakkonen_pct']} %")
+        e3.metric("3–7 %", f"{et['three_to_seven_pct']} %")
+        e4.metric("Pelastettu 2 %", "–" if et['pelastettu_kakkoseen_pct'] is None else f"{et['pelastettu_kakkoseen_pct']} %")
+        e5.metric("Jatkuu 3–7 %", "–" if et['jatkuu_huono_pct'] is None else f"{et['jatkuu_huono_pct']} %")
+
+
+def render_profile_tab(user_id):
+    profile = get_profile(user_id)
+    current_name = (profile or {}).get("display_name") or current_user_email() or "Pelaaja"
+    title_block("Profiili", "Vaihda näkyvä nimi. Tätä nimeä käytetään historiassa ja muualla sovelluksessa.")
+    st.write(f"**Sähköposti:** {current_user_email() or '–'}")
+    with st.form("profile_form"):
+        display_name = st.text_input("Näkyvä nimi", value=current_name)
+        if st.form_submit_button("Tallenna profiili"):
+            try:
+                update_profile_name(user_id, display_name)
+                st.success("Profiili päivitetty.")
+                st.rerun()
+            except Exception as e:
+                ui_error("Profiilin päivitys epäonnistui.", e)
+
+
+def main_view():
+    user_id = current_user_id()
+    render_topbar(user_id)
+    if is_admin():
+        st.info("Olet pääkäyttäjä. Voit muokata kenttiä, ratoja ja poistaa kenttiä.")
+    view = st.session_state.view
+    if view == "Etusivu":
+        render_dashboard(user_id)
+    elif view == "Kentät":
+        render_courses(user_id)
+    elif view == "Kierros":
+        render_new_round(user_id)
+    elif view == "Historia":
+        render_history(user_id)
+    elif view == "Analyysi":
+        render_analysis(user_id)
+    elif view == "Profiili":
+        render_profile_tab(user_id)
+
+
+apply_custom_css()
+init_state()
+restore_auth_session()
+if current_user_id() is None:
+    auth_view()
+else:
+    main_view()
