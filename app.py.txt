@@ -1,0 +1,57 @@
+import streamlit as st
+import pandas as pd
+import numpy as np
+import unicodedata
+
+st.set_page_config(page_title="Pelaajahaku & tilastot", layout="wide")
+
+def norm_name(s: str) -> str:
+    s = unicodedata.normalize("NFKD", str(s)).encode("ascii", "ignore").decode()
+    return s.lower().strip()
+
+@st.cache_data
+def load_data():
+    df = pd.read_parquet("results.parquet")
+    df["rank"] = pd.to_numeric(df["rank"], errors="coerce")
+    df["competition"] = pd.to_numeric(df["competition"], errors="coerce")
+    df["player_norm"] = df["player"].apply(norm_name)
+    return df
+
+def add_performance(df):
+    field_sizes = df.groupby("competition")["rank"].max().reset_index(name="field_size")
+    df = df.merge(field_sizes, on="competition", how="left")
+    df["performance_score"] = 1 - ((df["rank"] - 1) / (df["field_size"] - 1))
+    df["performance_score"] = df["performance_score"].fillna(1.0)
+    return df
+
+df = load_data()
+dfp = add_performance(df)
+
+# TOP 5 sidebar
+top5 = dfp[dfp["rank"] <= 5].groupby("player").size().reset_index(name="top5_finishes")
+top5 = top5.sort_values("top5_finishes", ascending=False).head(5)
+
+st.sidebar.title("Top 5 (sijoitukset)")
+st.sidebar.dataframe(top5)
+
+st.title("Pelaajahaku")
+
+tab1, tab2 = st.tabs(["Pelaajahaku", "Top-listat"])
+
+# -------- Pelaajahaku --------
+with tab1:
+    name = st.text_input("Hae pelaajaa")
+
+    if name:
+        match = df[df["player"].str.contains(name, case=False, na=False)]
+        st.write("Tulokset")
+        st.dataframe(match[["player", "rank", "competition"]])
+
+        st.write("Trendikäyrä")
+        match = match.sort_values("competition")
+        st.line_chart(match.set_index("competition")["rank"])
+
+# -------- TOP LISTAT --------
+with tab2:
+    st.subheader("Eniten Top 5 sijoituksia")
+    st.dataframe(top5)
