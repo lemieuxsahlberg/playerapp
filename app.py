@@ -173,12 +173,13 @@ def load_data(path="results.parquet", version="final_safe_v1") -> pd.DataFrame:
     df["competition_raw"] = df["competition_raw"].astype(str).str.replace(r"\.0$", "", regex=True)
     df["competition"] = pd.to_numeric(df["competition_raw"].apply(numeric_comp), errors="coerce")
 
-    if "year" not in df.columns:
-        df["year"] = df["competition_raw"].apply(year_from_competition)
-    else:
-        df["year"] = pd.to_numeric(df["year"], errors="coerce")
-        missing_year = df["year"].isna()
-        df.loc[missing_year, "year"] = df.loc[missing_year, "competition_raw"].apply(year_from_competition)
+    # Vuosi päätellään aina kilpailu-ID:stä.
+    # Tämä on tarkoituksella ylikirjoitus, koska parquetista tuleva year-sarake
+    # voi olla eri dtypeä ja pandas 3 on tiukka dtype-muutoksista.
+    df["year"] = pd.to_numeric(
+        df["competition_raw"].apply(year_from_competition),
+        errors="coerce"
+    )
 
     df["player"] = df["player"].astype(str).str.strip()
     df = df[df["player"].notna()].copy()
