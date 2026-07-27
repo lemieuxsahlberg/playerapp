@@ -1,6 +1,9 @@
 import re
 import unicodedata
+import uuid
 from typing import Optional
+
+import requests
 
 import numpy as np
 import pandas as pd
@@ -116,6 +119,59 @@ def t(key: str) -> str:
 
 def localize_columns(df_in: pd.DataFrame) -> pd.DataFrame:
     return df_in.rename(columns={c: COL_LABELS[c][LANG] for c in df_in.columns if c in COL_LABELS})
+
+
+def get_secret_value(name: str):
+    try:
+        return st.secrets[name]
+    except Exception:
+        return None
+
+
+def get_session_id() -> str:
+    if "analytics_session_id" not in st.session_state:
+        st.session_state["analytics_session_id"] = str(uuid.uuid4())
+    return st.session_state["analytics_session_id"]
+
+
+def log_event(event_type: str, query: Optional[str] = None, player_name: Optional[str] = None, player_norm: Optional[str] = None) -> None:
+    url = get_secret_value("SUPABASE_URL")
+    key = get_secret_value("SUPABASE_ANON_KEY")
+    if not url or not key:
+        return
+
+    payload = {
+        "event_type": event_type,
+        "query": query,
+        "player_name": player_name,
+        "player_norm": player_norm,
+        "session_id": get_session_id(),
+    }
+
+    try:
+        requests.post(
+            f"{str(url).rstrip('/')}/rest/v1/search_logs",
+            headers={
+                "apikey": key,
+                "Authorization": f"Bearer {key}",
+                "Content-Type": "application/json",
+                "Prefer": "return=minimal",
+            },
+            json=payload,
+            timeout=3,
+        )
+    except Exception:
+        # Lokitus ei saa koskaan kaataa appia.
+        pass
+
+
+def log_once(session_key: str, value: str, event_type: str, query: Optional[str] = None, player_name: Optional[str] = None, player_norm: Optional[str] = None) -> None:
+    if not value:
+        return
+    if st.session_state.get(session_key) == value:
+        return
+    log_event(event_type=event_type, query=query, player_name=player_name, player_norm=player_norm)
+    st.session_state[session_key] = value
 
 
 def norm_name(s: str) -> str:
@@ -588,6 +644,11 @@ with tabs[0]:
                 with left:
                     if st.button(str(hot_row["player"]), key=f"hot_open_{hot_row['player_norm']}", help=t("open_player")):
                         st.session_state["selected_player_norm"] = hot_row["player_norm"]
+                        log_event(
+                            "hot_player_click",
+                            player_name=str(hot_row["player"]),
+                            player_norm=str(hot_row["player_norm"]),
+                        )
                     st.caption(t("open_player"))
                 with right:
                     h1, h2, h3 = st.columns(3)
@@ -637,7 +698,9 @@ with tabs[0]:
     quick_options = players_table["player"].tolist()
     quick_pick = st.selectbox(t("select_player"), quick_options, key="overview_quick_pick")
     if st.button(t("open_player"), key="overview_open_player"):
-        st.session_state["selected_player_norm"] = players_table.loc[players_table["player"] == quick_pick, "player_norm"].iloc[0]
+        quick_norm = players_table.loc[players_table["player"] == quick_pick, "player_norm"].iloc[0]
+        st.session_state["selected_player_norm"] = quick_norm
+        log_event("quick_player_open", player_name=str(quick_pick), player_norm=str(quick_norm))
     if "selected_player_norm" in st.session_state:
         st.markdown("---")
         render_player_profile(df, players_table, st.session_state["selected_player_norm"])
@@ -663,6 +726,13 @@ with tabs[1]:
 with tabs[2]:
     st.markdown(f"## {t('player_search')}")
     q = st.text_input(t("filter_name"), "")
+    if q and len(q.strip()) >= 2:
+        log_once(
+            "last_logged_player_search_query",
+            q.strip(),
+            "search_query",
+            query=q.strip(),
+        )
     if q:
         qn = norm_name(q)
         options = players_table[players_table["player_search_key"].str.contains(qn, na=False)]["player"].tolist()
@@ -679,6 +749,12 @@ with tabs[2]:
     chosen = st.selectbox(t("select_player"), options=options, index=default_index)
     pn = players_table.loc[players_table["player"] == chosen, "player_norm"].iloc[0]
     st.session_state["selected_player_norm"] = pn
+    if "player_select_analytics_initialized" not in st.session_state:
+        st.session_state["player_select_analytics_initialized"] = True
+        st.session_state["last_logged_player_select"] = pn
+    elif st.session_state.get("last_logged_player_select") != pn:
+        log_event("player_open", player_name=str(chosen), player_norm=str(pn))
+        st.session_state["last_logged_player_select"] = pn
     render_player_profile(df, players_table, pn)
 
 with tabs[3]:
@@ -722,6 +798,13 @@ with tabs[3]:
     st.dataframe(localize_columns(players_table.sort_values("tournaments", ascending=False)[["player", "tournaments", "best_rank", "avg_rank", "top5_rate"]].head(50)), use_container_width=True)
     st.markdown(f"### {t('long_term_dev')}")
     ranking_query = st.text_input(t("search_players"), "")
+    if ranking_query and len(ranking_query.strip()) >= 2:
+        log_once(
+            "last_logged_ranking_search_query",
+            ranking_query.strip(),
+            "ranking_search_query",
+            query=ranking_query.strip(),
+        )
     overall_trend = qualified_players.sort_values("trend_slope", ascending=False).copy()
     if ranking_query:
         qn = norm_name(ranking_query)
