@@ -606,7 +606,7 @@ with tabsst.markdown(f"## {t('comparison_trends')}")
             st.line_chart(pivot)
 
 # ---------- Calculations ----------
-with tabsst.markdown(f"## {t('calculation')}"))
+with tabsst.markdown(f"## {t('calculation')}")
 
     if LANG == "Suomi":
         st.markdown("""
