@@ -438,7 +438,7 @@ tabs = st.tabs([
 ])
 
 # ---------- Overview ----------
-with tabsst.markdown(f"## {t('overview')}")
+with tabs:st.markdown(f"## {t('overview')}")
 
     total_players = df["player_norm"].nunique()
     total_competitions = df["competition_raw"].nunique()
