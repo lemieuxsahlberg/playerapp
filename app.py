@@ -79,6 +79,7 @@ TEXT = {
 
     "filter_name": {"Suomi": "Suodata nimeä", "English": "Filter name"},
     "select_player": {"Suomi": "Valitse pelaaja", "English": "Select player"},
+
     "best_rank": {"Suomi": "Paras sijoitus", "English": "Best rank"},
     "avg_rank": {"Suomi": "Sijoituskeskiarvo", "English": "Average rank"},
     "top5": {"Suomi": "Top 5", "English": "Top 5"},
@@ -212,7 +213,7 @@ def highlight_metric_card(label, value_html, color):
 
 # ---------- Data ----------
 @st.cache_data
-def load_data(path="results.parquet", version="fixed_v1") -> pd.DataFrame:
+def load_data(path="results.parquet", version="clean_v1") -> pd.DataFrame:
     df = pd.read_parquet(path).copy()
 
     if "player" not in df.columns or "rank" not in df.columns:
@@ -227,6 +228,8 @@ def load_data(path="results.parquet", version="fixed_v1") -> pd.DataFrame:
             df["competition_raw"] = df["source"].astype(str).str.extract(r"/([^/]+)/tulokset")[0]
         else:
             df["competition_raw"] = np.nan
+
+    df["competition_raw"] = df["competition_raw"].astype(str).str.replace(r"\.0$", "", regex=True)
 
     df["competition"] = df["competition_raw"].apply(numeric_comp)
     df["competition"] = pd.to_numeric(df["competition"], errors="coerce")
@@ -282,6 +285,10 @@ def load_data(path="results.parquet", version="fixed_v1") -> pd.DataFrame:
 
     df["player_search_key"] = df["player_norm"].apply(make_search_key)
 
+    # Poistetaan selkeät duplikaatit
+    subset_cols = ["player_norm", "competition_raw", "rank"]
+    df = df.drop_duplicates(subset=subset_cols, keep="first").copy()
+
     return df
 
 
@@ -290,13 +297,15 @@ def add_performance(df: pd.DataFrame) -> pd.DataFrame:
     df["rank"] = pd.to_numeric(df["rank"], errors="coerce")
     df["competition"] = pd.to_numeric(df["competition"], errors="coerce")
 
+    comp_col = "competition_raw" if "competition_raw" in df.columns else "competition"
+
     field_sizes = (
-        df.groupby("competition")["rank"]
+        df.groupby(comp_col)["rank"]
         .max()
         .reset_index(name="field_size")
     )
 
-    df = df.merge(field_sizes, on="competition", how="left")
+    df = df.merge(field_sizes, on=comp_col, how="left")
 
     denom = df["field_size"] - 1
     df["performance_score"] = np.where(
@@ -320,7 +329,7 @@ def compute_player_table(df: pd.DataFrame) -> pd.DataFrame:
     )
 
     total = (
-        dfp.groupby("player_norm")["competition"]
+        dfp.groupby("player_norm")["competition_raw"]
         .nunique()
         .reset_index(name="starts")
     )
@@ -338,7 +347,7 @@ def compute_player_table(df: pd.DataFrame) -> pd.DataFrame:
         dfp.groupby("player_norm")
         .agg(
             player=("player", "first"),
-            tournaments=("competition", "nunique"),
+            tournaments=("competition_raw", "nunique"),
             avg_rank=("rank", "mean"),
             best_rank=("rank", "min"),
             avg_perf=("performance_score", "mean"),
@@ -367,12 +376,13 @@ def compute_player_table(df: pd.DataFrame) -> pd.DataFrame:
         columns=["player_norm", "trend_slope", "current_form"]
     )
 
-    out = agg.merge(base, on="player_norm", how="left").merge(trend_df, on="player_norm", how="left")
+    out = agg.merge(base, on="player_norm", how="left")
+    out = out.merge(trend_df, on="player_norm", how="left")
     out = out.merge(search_key, on="player_norm", how="left")
 
     yearly = (
         dfp.dropna(subset=["year"])
-        .groupby(["player_norm", "year"])["competition"]
+        .groupby(["player_norm", "year"])["competition_raw"]
         .nunique()
         .reset_index(name="starts_year")
     )
@@ -417,7 +427,6 @@ if df.empty:
 players_table = compute_player_table(df)
 df_perf = add_performance(df)
 
-# ---------- Page ----------
 st.title(t("title"))
 
 tabs = st.tabs([
@@ -436,17 +445,15 @@ with tabsst.markdown(f"## {t('overview')}")
     total_rows = len(df)
 
     c1, c2, c3 = st.columns(3)
+
     with c1:
         st.markdown(metric_card(t("players"), total_players), unsafe_allow_html=True)
+
     with c2:
         st.markdown(metric_card(t("competitions"), total_competitions), unsafe_allow_html=True)
+
     with c3:
         st.markdown(metric_card(t("rows"), total_rows), unsafe_allow_html=True)
-
-    best_score_row = players_table.sort_values("score", ascending=False).iloc[0]
-    most_active_row = players_table.sort_values("tournaments", ascending=False).iloc[0]
-    most_top5_row = players_table.sort_values(["top5_finishes", "top5_rate"], ascending=False).iloc[0]
-`
 
     best_score_row = players_table.sort_values("score", ascending=False).iloc[0]
     most_active_row = players_table.sort_values("tournaments", ascending=False).iloc[0]
@@ -494,11 +501,13 @@ with tabsst.markdown(f"## {t('overview')}")
 with tabsst.markdown(f"## {t('player_search')}")
 
     q = st.text_input(t("filter_name"), "")
+
     if q:
         qn = norm_name(q)
         options = players_table[
             players_table["player_search_key"].str.contains(qn, na=False)
         ]["player"].tolist()
+
         if not options:
             options = players_table["player"].tolist()
             st.info(t("no_matches"))
@@ -506,6 +515,7 @@ with tabsst.markdown(f"## {t('player_search')}")
         options = players_table["player"].tolist()
 
     chosen = st.selectbox(t("select_player"), options=options, index=0)
+
     pn = players_table.loc[players_table["player"] == chosen, "player_norm"].iloc[0]
     row = players_table[players_table["player_norm"] == pn].iloc[0]
 
@@ -514,15 +524,19 @@ with tabsst.markdown(f"## {t('player_search')}")
 
     with c1:
         st.markdown(metric_card(t("best_rank"), int(row["best_rank"])), unsafe_allow_html=True)
+
     with c2:
         st.markdown(metric_card(t("avg_rank"), f"{row['avg_rank']:.2f}"), unsafe_allow_html=True)
+
     with c3:
         st.markdown(metric_card(t("top5"), f"{int(row['top5_finishes'])} ({row['top5_rate']*100:.1f}%)"), unsafe_allow_html=True)
 
     with c4:
         st.markdown(metric_card(t("consistency"), f"{row['consistency']:.3f}"), unsafe_allow_html=True)
+
     with c5:
         st.markdown(metric_card(t("trend"), f"{row['trend_slope']:+.4f}"), unsafe_allow_html=True)
+
     with c6:
         st.markdown(metric_card(t("current_form"), f"{row['current_form']:.3f}"), unsafe_allow_html=True)
 
@@ -532,15 +546,18 @@ with tabsst.markdown(f"## {t('player_search')}")
     if year_cols:
         st.markdown(f"### {t('starts_by_year')}")
         year_cards_cols = st.columns(min(4, len(year_cols)))
+
         for i, col in enumerate(year_cols):
             year = col.split("_")[1]
             label = f"Kisat {year}" if LANG == "Suomi" else f"Starts {year}"
+
             with year_cards_cols[i % len(year_cards_cols)]:
                 st.markdown(metric_card(label, int(row.get(col, 0))), unsafe_allow_html=True)
 
     ts = player_timeseries(df, pn)
 
     st.markdown(f"### {t('player_trend')}")
+
     if not ts.empty:
         st.line_chart(ts.set_index("competition")["performance_score"])
 
@@ -618,12 +635,13 @@ with tabsst.markdown(f"## {t('comparison_trends')}")
 
     if selected:
         chart_df = []
-        for p in selected:
-            pn = players_table.loc[players_table["player"] == p, "player_norm"].iloc[0]
+
+        for player in selected:
+            pn = players_table.loc[players_table["player"] == player, "player_norm"].iloc[0]
             sub = df_perf[df_perf["player_norm"] == pn].sort_values("competition")[
                 ["competition", "performance_score"]
             ].copy()
-            sub["player"] = p
+            sub["player"] = player
             chart_df.append(sub)
 
         if chart_df:
@@ -635,44 +653,48 @@ with tabsst.markdown(f"## {t('comparison_trends')}")
 with tabsst.markdown(f"## {t('calculation')}")
 
     if LANG == "Suomi":
-        st.markdown("""
-- **Paras sijoitus** = pienin rank  
-- **Sijoituskeskiarvo** = sijoitusten keskiarvo  
-- **Top 5** = montako kertaa rank ≤ 5  
-- **Top 5 -osuus** = top5 / starts  
-- **Performance score** = `1 − (rank−1)/(field_size−1)`  
-- **Tasaisuus** = `1 − std(performance_score)`  
-- **Trendi** = lineaarinen trendi performance_scorelle  
-- **Nykykunto** = viimeisten 5 kilpailun performance_score-keskiarvo  
-- **Eniten kilpailuja** = suurin kilpailumäärä  
-- **Pitkän aikavälin kehitys** = koko datan trendi  
-- **Greta Wedman + Greta Sahlberg**, **Pekka Peltola + Pekka Remes** sekä **Mia Paavola + Mia Vuorihovi** yhdistetään samoiksi pelaajiksi.  
-- **Vuosi** päätellään kilpailu-ID:n kahdesta ensimmäisestä numerosta.  
+        st.markdown(
+            """
+- **Paras sijoitus** = pienin rank
+- **Sijoituskeskiarvo** = sijoitusten keskiarvo
+- **Top 5** = montako kertaa rank ≤ 5
+- **Top 5 -osuus** = top5 / starts
+- **Performance score** = `1 − (rank−1)/(field_size−1)`
+- **Tasaisuus** = `1 − std(performance_score)`
+- **Trendi** = lineaarinen trendi performance_scorelle
+- **Nykykunto** = viimeisten 5 kilpailun performance_score-keskiarvo
+- **Eniten kilpailuja** = suurin kilpailumäärä
+- **Pitkän aikavälin kehitys** = koko datan trendi
+- **Greta Wedman + Greta Sahlberg**, **Pekka Peltola + Pekka Remes** sekä **Mia Paavola + Mia Vuorihovi** yhdistetään samoiksi pelaajiksi.
+- **Vuosi** päätellään kilpailu-ID:n kahdesta ensimmäisestä numerosta.
 - **Score** = painotettu yhdistelmä:
   - 45 % avg_perf
   - 20 % top5_rate
   - 20 % consistency
   - 15 % trend_slope
-        """)
+            """
+        )
     else:
-        st.markdown("""
-- **Best rank** = lowest rank  
-- **Average rank** = mean rank  
-- **Top 5** = number of times rank ≤ 5  
-- **Top 5 rate** = top5 / starts  
-- **Performance score** = `1 − (rank−1)/(field_size−1)`  
-- **Consistency** = `1 − std(performance_score)`  
-- **Trend** = linear slope of performance_score  
-- **Current form** = mean performance_score of last 5 competitions  
-- **Most competitions** = highest competition count  
-- **Long-term development** = trend over the full dataset  
-- Name aliases are merged where needed.  
+        st.markdown(
+            """
+- **Best rank** = lowest rank
+- **Average rank** = mean rank
+- **Top 5** = number of times rank ≤ 5
+- **Top 5 rate** = top5 / starts
+- **Performance score** = `1 − (rank−1)/(field_size−1)`
+- **Consistency** = `1 − std(performance_score)`
+- **Trend** = linear slope of performance_score
+- **Current form** = mean performance_score of last 5 competitions
+- **Most competitions** = highest competition count
+- **Long-term development** = trend over the full dataset
+- Name aliases are merged where needed.
 - **Score** = weighted combination:
   - 45% avg_perf
   - 20% top5_rate
   - 20% consistency
   - 15% trend_slope
-        """)
+            """
+        )
 
 st.markdown("---")
 st.caption(t("footer"))
