@@ -1,8 +1,10 @@
-import streamlit as st
-import pandas as pd
-import numpy as np
-import unicodedata
 import re
+import unicodedata
+
+import numpy as np
+import pandas as pd
+import streamlit as st
+
 
 st.set_page_config(
     page_title="Pelaajahaku / Player Stats",
@@ -10,7 +12,8 @@ st.set_page_config(
 )
 
 # ---------- Styling ----------
-st.markdown("""
+st.markdown(
+    """
 <style>
 .block-container {
     max-width: 1200px;
@@ -51,7 +54,9 @@ st.markdown("""
     font-weight: 700;
 }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True
+)
 
 # ---------- Language ----------
 LANG = st.radio("Kieli / Language", ["Suomi", "English"], horizontal=True)
@@ -107,8 +112,10 @@ TEXT = {
     "most_top5_card": {"Suomi": "Eniten Top 5 -sijoituksia", "English": "Most Top 5 finishes"},
 }
 
+
 def t(key):
     return TEXT.get(key, {"Suomi": key, "English": key}).get(LANG, key)
+
 
 COL_LABELS = {
     "player": {"Suomi": "Pelaaja", "English": "Player"},
@@ -127,18 +134,21 @@ COL_LABELS = {
     "score": {"Suomi": "Score", "English": "Score"},
 }
 
+
 def localize_columns(df_in: pd.DataFrame) -> pd.DataFrame:
     df_out = df_in.copy()
     rename_map = {}
-    for c in df_out.columns:
-        if c in COL_LABELS:
-            rename_map[c] = COL_LABELS[c][LANG]
+    for col in df_out.columns:
+        if col in COL_LABELS:
+            rename_map[col] = COL_LABELS[col][LANG]
     return df_out.rename(columns=rename_map)
+
 
 # ---------- Helpers ----------
 def norm_name(s: str) -> str:
     s = unicodedata.normalize("NFKD", str(s)).encode("ascii", "ignore").decode()
     return s.lower().strip()
+
 
 def make_search_key(normed: str) -> str:
     parts = str(normed).split()
@@ -147,11 +157,13 @@ def make_search_key(normed: str) -> str:
         return f"{normed} {reversed_name}"
     return str(normed)
 
+
 def numeric_comp(value):
     m = re.search(r"(\d+)", str(value))
     if not m:
         return np.nan
     return int(m.group(1))
+
 
 def year_from_competition(value):
     m = re.search(r"(\d+)", str(value))
@@ -161,6 +173,7 @@ def year_from_competition(value):
     yy = int(digits[:2])
     return 2000 + yy
 
+
 def score_color(value, metric_type="high"):
     if pd.isna(value):
         return "#999999"
@@ -168,17 +181,16 @@ def score_color(value, metric_type="high"):
     if metric_type == "high":
         if value >= 0.80:
             return "#2563eb"
-        elif value >= 0.60:
+        if value >= 0.60:
             return "#16a34a"
-        else:
-            return "#dc2626"
-    else:
-        if value <= 5:
-            return "#2563eb"
-        elif value <= 12:
-            return "#16a34a"
-        else:
-            return "#dc2626"
+        return "#dc2626"
+
+    if value <= 5:
+        return "#2563eb"
+    if value <= 12:
+        return "#16a34a"
+    return "#dc2626"
+
 
 def metric_card(label, value):
     return f"""
@@ -188,6 +200,7 @@ def metric_card(label, value):
     </div>
     """
 
+
 def highlight_metric_card(label, value_html, color):
     return f"""
     <div class="highlight-card" style="border: 2px solid {color}; border-left: 8px solid {color};">
@@ -196,9 +209,10 @@ def highlight_metric_card(label, value_html, color):
     </div>
     """
 
+
 # ---------- Data ----------
 @st.cache_data
-def load_data(path="results.parquet", version="rescue_v100") -> pd.DataFrame:
+def load_data(path="results.parquet", version="fixed_v1") -> pd.DataFrame:
     df = pd.read_parquet(path).copy()
 
     if "player" not in df.columns or "rank" not in df.columns:
@@ -256,6 +270,7 @@ def load_data(path="results.parquet", version="rescue_v100") -> pd.DataFrame:
         "vuorihovi mia": "vuorihovi mia",
         "mia vuorihovi": "vuorihovi mia",
     }
+
     df["player_norm"] = df["player_norm"].replace(alias_map)
 
     df.loc[df["player_norm"] == "sahlberg greta", "player"] = "Greta Sahlberg"
@@ -268,6 +283,7 @@ def load_data(path="results.parquet", version="rescue_v100") -> pd.DataFrame:
     df["player_search_key"] = df["player_norm"].apply(make_search_key)
 
     return df
+
 
 def add_performance(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
@@ -291,6 +307,7 @@ def add_performance(df: pd.DataFrame) -> pd.DataFrame:
 
     df["performance_score"] = pd.to_numeric(df["performance_score"], errors="coerce").fillna(1.0)
     return df
+
 
 def compute_player_table(df: pd.DataFrame) -> pd.DataFrame:
     dfp = add_performance(df)
@@ -377,11 +394,13 @@ def compute_player_table(df: pd.DataFrame) -> pd.DataFrame:
 
     return out.sort_values("score", ascending=False)
 
+
 def player_timeseries(df: pd.DataFrame, player_norm: str) -> pd.DataFrame:
     dfp = add_performance(df)
     sub = dfp[dfp["player_norm"] == player_norm].sort_values("competition")
     cols = ["competition_raw", "competition", "year", "rank", "performance_score", "player"]
     return sub[[c for c in cols if c in sub.columns]]
+
 
 # ---------- Load ----------
 try:
@@ -410,10 +429,10 @@ tabs = st.tabs([
 ])
 
 # ---------- Overview ----------
-with tabsst.markdown(f"## {t('overview')}")
+with tabs[0]:
+    st.markdown(f"## {t('overview')}")
 
-    total_players = df["player_norm"].nunique()
-    total_competitions = df["competition_raw"].nunique()
+    total_players = df["player_norm"].n    total_competitions = df["competition_raw"].nunique()
     total_rows = len(df)
 
     c1, c2, c3 = st.columns(3)
@@ -438,12 +457,14 @@ with tabsst.markdown(f"## {t('overview')}")
 
     with c2:
         color = score_color(most_active_row["tournaments"], metric_type="high")
-        value = f"{most_active_row['player']}<br><span style='font-size:1rem;'>{int(most_active_row['tournaments'])} kilpailua</span>"
+        label = "kilpailua" if LANG == "Suomi" else "competitions"
+        value = f"{most_active_row['player']}<br><span style='font-size:1rem;'>{int(most_active_row['tournaments'])} {label}</span>"
         st.markdown(highlight_metric_card(t("most_active_card"), value, color), unsafe_allow_html=True)
 
     with c3:
         color = score_color(most_top5_row["top5_rate"], metric_type="high")
-        value = f"{most_top5_row['player']}<br><span style='font-size:1rem;'>{int(most_top5_row['top5_finishes'])} Top 5 -sijoitusta</span>"
+        label = "Top 5 -sijoitusta" if LANG == "Suomi" else "Top-5 finishes"
+        value = f"{most_top5_row['player']}<br><span style='font-size:1rem;'>{int(most_top5_row['top5_finishes'])} {label}</span>"
         st.markdown(highlight_metric_card(t("most_top5_card"), value, color), unsafe_allow_html=True)
 
     st.markdown("### Top 3")
@@ -465,7 +486,7 @@ with tabsst.markdown(f"## {t('overview')}")
         st.dataframe(localize_columns(top5_home[["player", "top5_finishes", "top5_rate"]]), use_container_width=True)
 
 # ---------- Player Search ----------
-with tabsst.markdown(f"## {t('overview')}")
+with tabsst.markdown(f"## {t('player_search')}")
 
     q = st.text_input(t("filter_name"), "")
     if q:
