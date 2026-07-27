@@ -47,7 +47,7 @@ TEXT = {
     "competitions": {"Suomi": "Kilpailuja", "English": "Competitions"},
     "rows": {"Suomi": "Tulosrivejä", "English": "Result rows"},
     "hot_now": {"Suomi": "Viime kisojen viremittari", "English": "Recent form meter"},
-    "hot_now_note": {"Suomi": "Ketkä ovat olleet kovassa iskussa juuri nyt? Kunto perustuu viiden uusimman kisan suoritustasoon ja trendi näyttää suunnan.", "English": "Who is in good form right now? Form is based on performance level in the five latest competitions and trend shows direction."},
+    "hot_now_note": {"Suomi": "Ketkä ovat olleet kovassa iskussa juuri nyt? Kunto perustuu viiden uusimman kisan suoritustasoon ja näytetään prosentteina. Trendi näyttää suunnan.", "English": "Who is in good form right now? Form is based on performance level in the five latest competitions and is shown as a percentage. Trend shows direction."},
     "quick_search": {"Suomi": "Pikahaku pelaajaan", "English": "Quick player search"},
     "open_player": {"Suomi": "Avaa pelaajan tiedot", "English": "Open player details"},
     "season_snapshot": {"Suomi": "Kauden kärkinimet 2026", "English": "Season highlights 2026"},
@@ -109,6 +109,7 @@ COL_LABELS = {
     "performance_score": {"Suomi": "Performance score", "English": "Performance score"},
     "hot_score": {"Suomi": "Hot score", "English": "Hot score"},
     "recent_form_score": {"Suomi": "Kunto", "English": "Form"},
+    "recent_form_pct": {"Suomi": "Kunto (%)", "English": "Form (%)"},
     "recent_trend": {"Suomi": "Trendi", "English": "Trend"},
 }
 
@@ -134,11 +135,14 @@ def get_session_id() -> str:
     return st.session_state["analytics_session_id"]
 
 
-def log_event(event_type: str, query: Optional[str] = None, player_name: Optional[str] = None, player_norm: Optional[str] = None) -> None:
+def log_event(event_type: str, query: Optional[str] = None, player_name: Optional[str] = None, player_norm: Optional[str] = None) -> bool:
     url = get_secret_value("SUPABASE_URL")
     key = get_secret_value("SUPABASE_ANON_KEY")
+
     if not url or not key:
-        return
+        st.session_state["analytics_last_status"] = "NO_SECRETS"
+        st.session_state["analytics_last_error"] = "SUPABASE_URL tai SUPABASE_ANON_KEY puuttuu Streamlit Secretsistä."
+        return False
 
     payload = {
         "event_type": event_type,
@@ -149,7 +153,7 @@ def log_event(event_type: str, query: Optional[str] = None, player_name: Optiona
     }
 
     try:
-        requests.post(
+        response = requests.post(
             f"{str(url).rstrip('/')}/rest/v1/search_logs",
             headers={
                 "apikey": key,
@@ -158,11 +162,15 @@ def log_event(event_type: str, query: Optional[str] = None, player_name: Optiona
                 "Prefer": "return=minimal",
             },
             json=payload,
-            timeout=3,
+            timeout=5,
         )
-    except Exception:
-        # Lokitus ei saa koskaan kaataa appia.
-        pass
+        st.session_state["analytics_last_status"] = str(response.status_code)
+        st.session_state["analytics_last_error"] = response.text[:500]
+        return 200 <= response.status_code < 300
+    except Exception as exc:
+        st.session_state["analytics_last_status"] = "EXCEPTION"
+        st.session_state["analytics_last_error"] = str(exc)[:500]
+        return False
 
 
 def log_once(session_key: str, value: str, event_type: str, query: Optional[str] = None, player_name: Optional[str] = None, player_norm: Optional[str] = None) -> None:
@@ -272,6 +280,12 @@ def trend_symbol_value(slope: float) -> str:
     else:
         symbol = "→"
     return f"{symbol} {pp:+.1f}"
+
+
+def form_percent(value) -> str:
+    if pd.isna(value):
+        return "-"
+    return f"{float(value) * 100:.0f} %"
 
 
 @st.cache_data
@@ -566,7 +580,7 @@ def render_player_profile(df: pd.DataFrame, players_table: pd.DataFrame, player_
     recent = recent_stats_for_player(df, player_norm, latest_count=5)
     r1, r2, r3 = st.columns(3)
     with r1:
-        st.metric(t("form"), "-" if pd.isna(recent["form"]) else f"{recent['form']:.3f}")
+        st.metric(t("form"), form_percent(recent["form"]))
     with r2:
         st.metric("Trendi (%-yks./kisa)" if LANG == "Suomi" else "Trend (pp/start)", trend_symbol_value(recent["trend"]))
     with r3:
@@ -653,7 +667,7 @@ with tabs[0]:
                 with right:
                     h1, h2, h3 = st.columns(3)
                     with h1:
-                        st.metric(t("form"), f"{hot_row['recent_form_score']:.3f}")
+                        st.metric(t("form"), form_percent(hot_row["recent_form_score"]))
                     with h2:
                         st.metric("Trendi (%-yks./kisa)" if LANG == "Suomi" else "Trend (pp/start)", hot_row["recent_trend_display"])
                     with h3:
@@ -720,7 +734,8 @@ with tabs[1]:
             recent_rows.append((pn, recent["form"], trend_symbol_value(recent["trend"]), recent["top5_last3"], recent["starts_last3"], recent["spark"]))
         recent_df = pd.DataFrame(recent_rows, columns=["player_norm", "recent_form_score", "recent_trend", "last3_top5", "last3_starts", "spark"])
         season_players = season_players.merge(recent_df, on="player_norm", how="left")
-        display_cols = ["player", "score", "tournaments", "avg_rank", "best_rank", "top5_finishes", "recent_form_score", "recent_trend"]
+        season_players["recent_form_pct"] = season_players["recent_form_score"].apply(form_percent)
+        display_cols = ["player", "score", "tournaments", "avg_rank", "best_rank", "top5_finishes", "recent_form_pct", "recent_trend"]
         st.dataframe(localize_columns(season_players.sort_values("score", ascending=False)[display_cols]), use_container_width=True)
 
 with tabs[2]:
@@ -829,6 +844,23 @@ with tabs[4]:
 
 with tabs[5]:
     st.markdown(f"## {t('calculation')}")
+
+    with st.expander("Lokitusdiagnostiikka" if LANG == "Suomi" else "Logging diagnostics"):
+        has_url = bool(get_secret_value("SUPABASE_URL"))
+        has_key = bool(get_secret_value("SUPABASE_ANON_KEY"))
+        st.write({
+            "SUPABASE_URL löytyy": has_url,
+            "SUPABASE_ANON_KEY löytyy": has_key,
+            "viimeisin_status": st.session_state.get("analytics_last_status", "ei vielä testattu"),
+            "viimeisin_viesti": st.session_state.get("analytics_last_error", ""),
+        })
+        if st.button("Testaa lokitusta" if LANG == "Suomi" else "Test logging"):
+            ok = log_event("diagnostic_test", query="test")
+            if ok:
+                st.success("Lokitus onnistui. Tarkista Supabase → Table Editor → search_logs.")
+            else:
+                st.error("Lokitus ei onnistunut. Katso status ja viesti yllä, ja aja tarvittaessa SQL uudestaan.")
+
     if LANG == "Suomi":
         st.markdown(
             """
@@ -839,9 +871,9 @@ with tabs[5]:
 - **Performance score** = `1 − (rank−1)/(field_size−1)`
 - **Tasaisuus** = `1 − std(performance_score)`
 - **Trendi** = lineaarinen trendi performance scorelle
-- **Kunto** = viimeisten kilpailujen performance score -keskiarvo
+- **Kunto** = viimeisten kilpailujen performance score -keskiarvo prosentteina
 - **Top-listoissa oletusminimi on 3 kilpailua**, jotta 1–2 kisan pelaajat eivät nouse listojen kärkeen liian kevyellä otannalla.
-- **Tämän hetken kuumimmat pelaajat** = viiden uusimman kilpailun perusteella. Näytössä: kunto (0–1), trendi (%-yksikköä/kisa) ja virekäyrä.
+- **Tämän hetken kuumimmat pelaajat** = viiden uusimman kilpailun perusteella. Näytössä: kunto prosentteina, trendi (%-yksikköä/kisa) ja virekäyrä.
 - **Pitkän aikavälin kehitys** = koko datan trendi
 - **Vuosi** päätellään kilpailu-ID:n kahdesta ensimmäisestä numerosta.
 - **Score** = painotettu yhdistelmä: 45 % avg_perf, 20 % top5_rate, 20 % consistency ja 15 % trend_slope.
@@ -857,9 +889,9 @@ with tabs[5]:
 - **Performance score** = `1 − (rank−1)/(field_size−1)`
 - **Consistency** = `1 − std(performance_score)`
 - **Trend** = linear slope of performance score
-- **Form** = recent average performance score
+- **Form** = recent average performance score shown as a percentage
 - **Ranking lists default to a minimum of 3 competitions** so players with only 1–2 starts do not dominate the lists too easily.
-- **Hottest players right now** = based on the five latest competitions: form, trend and sparkline.
+- **Hottest players right now** = based on the five latest competitions: form percentage, trend and sparkline.
 - **Long-term development** = trend over the full dataset
 - **Score** = weighted combination: 45% avg_perf, 20% top5_rate, 20% consistency and 15% trend_slope.
             """
