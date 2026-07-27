@@ -161,6 +161,9 @@ def load_data(path="results.parquet", version="final_safe_v1") -> pd.DataFrame:
         raise ValueError(f"results.parquetista puuttuu sarakkeet: {sorted(missing)}")
 
     df["rank"] = pd.to_numeric(df["rank"], errors="coerce")
+    # Poistetaan virheelliset / joukkue- tai parikisojen kaltaiset rivit, joissa sijoitus ei ole oikea yksilösijoitus.
+    df = df[df["rank"].notna()].copy()
+    df = df[df["rank"] >= 1].copy()
 
     if "competition_raw" not in df.columns:
         if "competition" in df.columns:
@@ -194,8 +197,18 @@ def load_data(path="results.parquet", version="final_safe_v1") -> pd.DataFrame:
     df = df[~df["player"].str.contains(bad_pattern, case=False, na=False)].copy()
     df = df[df["player"].str.contains(r"[A-Za-zÅÄÖåäö]", regex=True, na=False)].copy()
 
+    # Poistetaan parikilpailu-/joukkuekilpailurivit ja parserin väärät osumat.
+    # Oikeassa pelaajanimessä ei pitäisi olla tulosnumeroita, =-merkkejä tai tulostaulukkorakenteita.
+    team_or_score_pattern = r"\d|=|/|\bH\s+\d|\bE\s+\d|\bB\s+\d|\bC\s+\d"
+    df = df[~df["player"].str.contains(team_or_score_pattern, regex=True, case=False, na=False)].copy()
+
+    # Varmistus: erittäin pitkät merkkijonot ovat lähes aina kokonaisia tulostaulurivejä, eivät henkilöiden nimiä.
+    df = df[df["player"].str.len() <= 45].copy()
+
     df["player_norm"] = df["player"].apply(norm_name)
     alias_map = {
+        "koski greta": "sahlberg greta",
+        "greta koski": "sahlberg greta",
         "wedman greta": "sahlberg greta",
         "greta wedman": "sahlberg greta",
         "sahlberg greta": "sahlberg greta",
@@ -208,11 +221,17 @@ def load_data(path="results.parquet", version="final_safe_v1") -> pd.DataFrame:
         "mia paavola": "vuorihovi mia",
         "vuorihovi mia": "vuorihovi mia",
         "mia vuorihovi": "vuorihovi mia",
+
+        "raesola kosti": "salonen kosti",
+        "kosti raesola": "salonen kosti",
+        "salonen kosti": "salonen kosti",
+        "kosti salonen": "salonen kosti",
     }
     df["player_norm"] = df["player_norm"].replace(alias_map)
     df.loc[df["player_norm"] == "sahlberg greta", "player"] = "Greta Sahlberg"
     df.loc[df["player_norm"] == "remes pekka", "player"] = "Pekka Remes"
     df.loc[df["player_norm"] == "vuorihovi mia", "player"] = "Mia Vuorihovi"
+    df.loc[df["player_norm"] == "salonen kosti", "player"] = "Kosti Salonen"
 
     excluded_norms = {"erik hjalmarsson", "hjalmarsson erik"}
     df = df[~df["player_norm"].isin(excluded_norms)].copy()
@@ -485,7 +504,7 @@ with tabs[4]:
 - **Nykykunto** = viimeisten 5 kilpailun performance_score-keskiarvo
 - **Eniten kilpailuja** = suurin kilpailumäärä
 - **Pitkän aikavälin kehitys** = koko datan trendi
-- **Greta Wedman + Greta Sahlberg**, **Pekka Peltola + Pekka Remes** sekä **Mia Paavola + Mia Vuorihovi** yhdistetään samoiksi pelaajiksi.
+- **Greta Koski + Greta Wedman + Greta Sahlberg**, **Pekka Peltola + Pekka Remes**, **Mia Paavola + Mia Vuorihovi** sekä **Kosti Raesola + Kosti Salonen** yhdistetään samoiksi pelaajiksi.
 - **Vuosi** päätellään kilpailu-ID:n kahdesta ensimmäisestä numerosta.
 - **Score** = painotettu yhdistelmä:
   - 45 % avg_perf
