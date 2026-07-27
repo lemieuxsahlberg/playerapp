@@ -50,6 +50,8 @@ TEXT = {
     "recent_results": {"Suomi": "Viimeisimmät kilpailut", "English": "Most recent competitions"},
     "starts_by_year": {"Suomi": "Kisat vuosittain", "English": "Starts by year"},
     "score_label": {"Suomi": "Score-järjestys", "English": "Score ranking"},
+    "yearly_top": {"Suomi": "Vuosittaiset top-listat", "English": "Yearly top lists"},
+    "yearly_top_note": {"Suomi": "Näyttää uusimman datavuoden sekä kolme sitä edeltävää vuotta, jos dataa löytyy.", "English": "Shows the latest data year and the three preceding years when data exists."},
     "most_top5": {"Suomi": "Eniten Top 5 -sijoituksia", "English": "Most Top 5 finishes"},
     "best_avg_rank": {"Suomi": "Paras sijoituskeskiarvo", "English": "Best average rank"},
     "most_active": {"Suomi": "Eniten kilpailuja", "English": "Most competitions"},
@@ -331,6 +333,18 @@ def player_timeseries(df: pd.DataFrame, player_norm: str) -> pd.DataFrame:
     return sub[[c for c in cols if c in sub.columns]]
 
 
+def recent_years_from_data(df: pd.DataFrame, count: int = 4) -> list[int]:
+    years = (
+        pd.to_numeric(df.get("year"), errors="coerce")
+        .dropna()
+        .astype(int)
+        .unique()
+        .tolist()
+    )
+    years = sorted(years, reverse=True)
+    return years[:count]
+
+
 try:
     df = load_data()
 except Exception as exc:
@@ -453,6 +467,58 @@ with tabs[2]:
     st.markdown(f"## {t('rankings')}")
     st.markdown(f"### {t('score_label')}")
     st.dataframe(localize_columns(players_table.sort_values("score", ascending=False)[["player", "score", "avg_rank", "top5_rate", "consistency", "tournaments"]].head(50)), use_container_width=True)
+
+    st.markdown(f"### {t('yearly_top')}")
+    st.caption(t("yearly_top_note"))
+    recent_years = recent_years_from_data(df, count=4)
+
+    if recent_years:
+        year_tabs = st.tabs([str(y) for y in recent_years])
+        for year_tab, year in zip(year_tabs, recent_years):
+            with year_tab:
+                year_df = df[pd.to_numeric(df["year"], errors="coerce") == year].copy()
+
+                if year_df.empty:
+                    st.info(f"Ei dataa vuodelle {year}.")
+                    continue
+
+                year_players = compute_player_table(year_df)
+                y1, y2, y3 = st.columns(3)
+
+                with y1:
+                    st.markdown("#### Score")
+                    st.dataframe(
+                        localize_columns(
+                            year_players.sort_values("score", ascending=False)[
+                                ["player", "score", "avg_rank", "top5_rate", "tournaments"]
+                            ].head(10)
+                        ),
+                        use_container_width=True,
+                    )
+
+                with y2:
+                    st.markdown(f"#### {t('most_top5')}")
+                    st.dataframe(
+                        localize_columns(
+                            year_players.sort_values(["top5_finishes", "top5_rate"], ascending=False)[
+                                ["player", "top5_finishes", "top5_rate", "tournaments"]
+                            ].head(10)
+                        ),
+                        use_container_width=True,
+                    )
+
+                with y3:
+                    st.markdown(f"#### {t('best_avg_rank')}")
+                    st.dataframe(
+                        localize_columns(
+                            year_players.sort_values("avg_rank", ascending=True)[
+                                ["player", "avg_rank", "best_rank", "tournaments"]
+                            ].head(10)
+                        ),
+                        use_container_width=True,
+                    )
+    else:
+        st.info("Vuositietoa ei löytynyt datasta.")
 
     st.markdown(f"### {t('most_top5')}")
     st.dataframe(localize_columns(players_table.sort_values("top5_finishes", ascending=False)[["player", "top5_finishes", "top5_rate", "tournaments", "best_rank", "consistency"]].head(50)), use_container_width=True)
