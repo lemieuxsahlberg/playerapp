@@ -429,12 +429,11 @@ tabs = st.tabs([
 ])
 
 # ---------- Overview ----------
-with tabs[0]:
-    st.markdown(f"## {t('overview')}")
+with tabsst.markdown(f"## {t('overview')}")
 
-total_players = df["player_norm"].nunique()
-total_competitions = df["competition_raw"].nunique()
-total_rows = len(df)
+    total_players = df["player_norm"].nunique()
+    total_competitions = df["competition_raw"].nunique()
+    total_rows = len(df)
 
     c1, c2, c3 = st.columns(3)
     with c1:
@@ -443,6 +442,11 @@ total_rows = len(df)
         st.markdown(metric_card(t("competitions"), total_competitions), unsafe_allow_html=True)
     with c3:
         st.markdown(metric_card(t("rows"), total_rows), unsafe_allow_html=True)
+
+    best_score_row = players_table.sort_values("score", ascending=False).iloc[0]
+    most_active_row = players_table.sort_values("tournaments", ascending=False).iloc[0]
+    most_top5_row = players_table.sort_values(["top5_finishes", "top5_rate"], ascending=False).iloc[0]
+`
 
     best_score_row = players_table.sort_values("score", ascending=False).iloc[0]
     most_active_row = players_table.sort_values("tournaments", ascending=False).iloc[0]
