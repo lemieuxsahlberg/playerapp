@@ -465,7 +465,7 @@ with tabsst.markdown(f"## {t('overview')}")
         st.dataframe(localize_columns(top5_home[["player", "top5_finishes", "top5_rate"]]), use_container_width=True)
 
 # ---------- Player Search ----------
-with tabsst.markdown(f"## {t('player_search')}")
+with tabsst.markdown(f"## {t('overview')}")
 
     q = st.text_input(t("filter_name"), "")
     if q:
