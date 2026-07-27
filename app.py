@@ -38,7 +38,7 @@ TEXT = {
     "active_home": {"Suomi": "Aktiivisuus", "English": "Activity"},
     "top5_home": {"Suomi": "Eniten Top 5 -sijoituksia", "English": "Most Top 5 finishes"},
     "hot_now": {"Suomi": "Tämän hetken kuumimmat pelaajat", "English": "Hottest players right now"},
-    "hot_now_note": {"Suomi": "Laskettu koko datan viidestä viimeisimmästä järjestetystä kilpailusta. Mukaan nostetaan ensisijaisesti pelaajat, joilla on vähintään 2 kilpailua näistä viidestä.", "English": "Calculated from the latest five competitions in the dataset. Players with at least 2 starts in those five are prioritized."},
+    "hot_now_note": {"Suomi": "Viime kisojen viremittari: ketkä ovat olleet kovassa iskussa juuri nyt? Kunto perustuu viiden uusimman kisan suoritustasoon, trendi näyttää suunnan ja Top-5 sijoitukset kolmessa viimeisimmässä kisassa.", "English": "Based on the five latest competitions. Players with at least 2/5 starts are prioritized. Form = average performance score (0–1). Trend = change in percentage points per start."},
     "open_player": {"Suomi": "Avaa pelaajan tiedot", "English": "Open player details"},
     "filter_name": {"Suomi": "Suodata nimeä", "English": "Filter name"},
     "select_player": {"Suomi": "Valitse pelaaja", "English": "Select player"},
@@ -260,21 +260,21 @@ def safe_slope(values) -> float:
     return 0.0
 
 
-def trend_readable(slope: float) -> str:
+def trend_symbol_value(slope: float) -> str:
     if pd.isna(slope):
         return "-"
     pp = slope * 100
-    if slope >= 0.02:
-        label = "selvästi nousussa" if LANG == "Suomi" else "clearly rising"
-    elif slope >= 0.005:
-        label = "lievästi nousussa" if LANG == "Suomi" else "slightly rising"
-    elif slope <= -0.02:
-        label = "selvästi laskussa" if LANG == "Suomi" else "clearly declining"
-    elif slope <= -0.005:
-        label = "lievästi laskussa" if LANG == "Suomi" else "slightly declining"
+    if pp >= 2.0:
+        symbol = "↑"
+    elif pp >= 0.5:
+        symbol = "↗"
+    elif pp <= -2.0:
+        symbol = "↓"
+    elif pp <= -0.5:
+        symbol = "↘"
     else:
-        label = "tasainen" if LANG == "Suomi" else "stable"
-    return f"{label} ({pp:+.1f} %-yks./kisa)" if LANG == "Suomi" else f"{label} ({pp:+.1f} pp/start)"
+        symbol = "→"
+    return f"{symbol} {pp:+.1f}"
 
 
 def compute_player_table(df: pd.DataFrame) -> pd.DataFrame:
@@ -509,7 +509,8 @@ with tabs[0]:
                     with h1:
                         st.metric("Kunto" if LANG == "Suomi" else "Form", f"{hot_row['last5_form']:.3f}")
                     with h2:
-                        st.metric(t("trend"), trend_readable(float(hot_row["last5_trend"])))
+                        trend_label = "Trendi (%-yks./kisa)" if LANG == "Suomi" else "Trend (pp/start)"
+                        st.metric(trend_label, trend_symbol_value(float(hot_row["last5_trend"])))
                     with h3:
                         st.metric("Top 5 / 3 viim." if LANG == "Suomi" else "Top 5 / last 3", f"{int(hot_row['last3_top5'])}/{int(hot_row['last3_starts'])}")
                     st.caption(("Paras sijoitus viidessä viimeisimmässä kisassa: " if LANG == "Suomi" else "Best rank in latest five competitions: ") + str(int(hot_row["last5_best_rank"])))
@@ -623,7 +624,7 @@ with tabs[4]:
 - **Nykykunto** = viimeisten 5 kilpailun performance_score-keskiarvo
 - **Eniten kilpailuja** = suurin kilpailumäärä
 - **Top-listoissa oletusminimi on 3 kilpailua**, jotta 1–2 kisan pelaajat eivät nouse listojen kärkeen liian kevyellä otannalla.
-- **Tämän hetken kuumimmat pelaajat** = viiden viimeisimmän järjestetyn kilpailun perusteella laskettu yhdistelmä: form, trendi ja Top 5 -osumat.
+- **Tämän hetken kuumimmat pelaajat** = viiden uusimman kilpailun perusteella. Näytössä: kunto (0–1), trendi (%-yksikköä/kisa) ja Top 5 -osumat kolmessa viimeisimmässä kisassa.
 - **Pitkän aikavälin kehitys** = koko datan trendi
 - **Vuosi** päätellään kilpailu-ID:n kahdesta ensimmäisestä numerosta.
 - **Score** = painotettu yhdistelmä:
@@ -646,7 +647,7 @@ with tabs[4]:
 - **Current form** = mean performance_score of last 5 competitions
 - **Most competitions** = highest competition count
 - **Ranking lists default to a minimum of 3 competitions** so players with only 1–2 starts do not dominate the lists too easily.
-- **Hottest players right now** = based on a combination of form, trend and Top 5 finishes in the five most recent competitions.
+- **Hottest players right now** = based on the five latest competitions. Displayed: form (0–1), trend (percentage points/start) and Top 5 finishes in the latest three competitions.
 - **Long-term development** = trend over the full dataset
 - **Score** = weighted combination:
   - 45% avg_perf
