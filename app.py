@@ -50,6 +50,9 @@ TEXT = {
     "recent_results": {"Suomi": "Viimeisimmät kilpailut", "English": "Most recent competitions"},
     "starts_by_year": {"Suomi": "Kisat vuosittain", "English": "Starts by year"},
     "score_label": {"Suomi": "Score-järjestys", "English": "Score ranking"},
+    "min_starts_label": {"Suomi": "Minimikisamäärä top-listoille", "English": "Minimum starts for rankings"},
+    "min_starts_help": {"Suomi": "Suodattaa pois pelaajat, joilla on liian vähän kilpailuja. Suositus: 3.", "English": "Filters out players with too few competitions. Recommendation: 3."},
+    "qualified_note": {"Suomi": "Listoissa näkyy vain pelaajat, joilla on vähintään valittu määrä kilpailuja.", "English": "Rankings only include players with at least the selected number of competitions."},
     "yearly_top": {"Suomi": "Vuosittaiset top-listat", "English": "Yearly top lists"},
     "yearly_top_note": {"Suomi": "Näyttää uusimman datavuoden sekä kolme sitä edeltävää vuotta, jos dataa löytyy.", "English": "Shows the latest data year and the three preceding years when data exists."},
     "most_top5": {"Suomi": "Eniten Top 5 -sijoituksia", "English": "Most Top 5 finishes"},
@@ -377,9 +380,14 @@ with tabs[0]:
     with c3:
         st.markdown(metric_card(t("rows"), total_rows), unsafe_allow_html=True)
 
-    best_score_row = players_table.sort_values("score", ascending=False).iloc[0]
+    overview_min_starts = 3
+    overview_qualified = players_table[players_table["tournaments"] >= overview_min_starts].copy()
+    if overview_qualified.empty:
+        overview_qualified = players_table.copy()
+
+    best_score_row = overview_qualified.sort_values("score", ascending=False).iloc[0]
     most_active_row = players_table.sort_values("tournaments", ascending=False).iloc[0]
-    most_top5_row = players_table.sort_values(["top5_finishes", "top5_rate"], ascending=False).iloc[0]
+    most_top5_row = overview_qualified.sort_values(["top5_finishes", "top5_rate"], ascending=False).iloc[0]
 
     st.markdown("### Nostoja")
     c1, c2, c3 = st.columns(3)
@@ -399,10 +407,11 @@ with tabs[0]:
         st.markdown(highlight_metric_card(t("most_top5_card"), value, color), unsafe_allow_html=True)
 
     st.markdown("### Top 3")
+    st.caption("Vähintään 3 kilpailua / Minimum 3 competitions")
     c1, c2, c3 = st.columns(3)
     with c1:
         st.markdown(f"#### {t('score_home')}")
-        score_home = players_table.sort_values("score", ascending=False).head(3)
+        score_home = overview_qualified.sort_values("score", ascending=False).head(3)
         st.dataframe(localize_columns(score_home[["player", "score", "best_rank"]]), use_container_width=True)
     with c2:
         st.markdown(f"#### {t('active_home')}")
@@ -410,7 +419,7 @@ with tabs[0]:
         st.dataframe(localize_columns(active_home[["player", "tournaments", "best_rank"]]), use_container_width=True)
     with c3:
         st.markdown(f"#### {t('top5_home')}")
-        top5_home = players_table.sort_values(["top5_finishes", "top5_rate"], ascending=False).head(3)
+        top5_home = overview_qualified.sort_values(["top5_finishes", "top5_rate"], ascending=False).head(3)
         st.dataframe(localize_columns(top5_home[["player", "top5_finishes", "top5_rate"]]), use_container_width=True)
 
 # ---------- Player Search ----------
@@ -465,8 +474,23 @@ with tabs[1]:
 # ---------- Rankings ----------
 with tabs[2]:
     st.markdown(f"## {t('rankings')}")
+
+    min_starts = st.number_input(
+        t("min_starts_label"),
+        min_value=1,
+        max_value=50,
+        value=3,
+        step=1,
+        help=t("min_starts_help"),
+    )
+    qualified_players = players_table[players_table["tournaments"] >= min_starts].copy()
+    if qualified_players.empty:
+        st.warning("Ei pelaajia tällä minimikisamäärällä. Näytetään kaikki pelaajat." if LANG == "Suomi" else "No players match this minimum. Showing all players.")
+        qualified_players = players_table.copy()
+    st.caption(t("qualified_note"))
+
     st.markdown(f"### {t('score_label')}")
-    st.dataframe(localize_columns(players_table.sort_values("score", ascending=False)[["player", "score", "avg_rank", "top5_rate", "consistency", "tournaments"]].head(50)), use_container_width=True)
+    st.dataframe(localize_columns(qualified_players.sort_values("score", ascending=False)[["player", "score", "avg_rank", "top5_rate", "consistency", "tournaments"]].head(50)), use_container_width=True)
 
     st.markdown(f"### {t('yearly_top')}")
     st.caption(t("yearly_top_note"))
@@ -483,6 +507,11 @@ with tabs[2]:
                     continue
 
                 year_players = compute_player_table(year_df)
+                year_players = year_players[year_players["tournaments"] >= min_starts].copy()
+                if year_players.empty:
+                    st.info(("Ei pelaajia minimikisamäärällä " + str(min_starts) + " tällä vuodella.") if LANG == "Suomi" else ("No players with minimum " + str(min_starts) + " starts for this year."))
+                    continue
+
                 y1, y2, y3 = st.columns(3)
 
                 with y1:
@@ -521,17 +550,17 @@ with tabs[2]:
         st.info("Vuositietoa ei löytynyt datasta.")
 
     st.markdown(f"### {t('most_top5')}")
-    st.dataframe(localize_columns(players_table.sort_values("top5_finishes", ascending=False)[["player", "top5_finishes", "top5_rate", "tournaments", "best_rank", "consistency"]].head(50)), use_container_width=True)
+    st.dataframe(localize_columns(qualified_players.sort_values("top5_finishes", ascending=False)[["player", "top5_finishes", "top5_rate", "tournaments", "best_rank", "consistency"]].head(50)), use_container_width=True)
 
     st.markdown(f"### {t('best_avg_rank')}")
-    st.dataframe(localize_columns(players_table.sort_values("avg_rank", ascending=True)[["player", "avg_rank", "best_rank", "top5_rate", "consistency", "tournaments"]].head(50)), use_container_width=True)
+    st.dataframe(localize_columns(qualified_players.sort_values("avg_rank", ascending=True)[["player", "avg_rank", "best_rank", "top5_rate", "consistency", "tournaments"]].head(50)), use_container_width=True)
 
     st.markdown(f"### {t('most_active')}")
     st.dataframe(localize_columns(players_table.sort_values("tournaments", ascending=False)[["player", "tournaments", "best_rank", "avg_rank", "top5_rate"]].head(50)), use_container_width=True)
 
     st.markdown(f"### {t('long_term_dev')}")
     ranking_query = st.text_input(t("search_players"), "")
-    overall_trend = players_table.sort_values("trend_slope", ascending=False).copy()
+    overall_trend = qualified_players.sort_values("trend_slope", ascending=False).copy()
     if ranking_query:
         qn = norm_name(ranking_query)
         overall_trend = overall_trend[overall_trend["player_search_key"].str.contains(qn, na=False)].copy()
@@ -569,6 +598,7 @@ with tabs[4]:
 - **Trendi** = lineaarinen trendi performance_scorelle
 - **Nykykunto** = viimeisten 5 kilpailun performance_score-keskiarvo
 - **Eniten kilpailuja** = suurin kilpailumäärä
+- **Top-listoissa oletusminimi on 3 kilpailua**, jotta 1–2 kisan pelaajat eivät nouse listojen kärkeen liian kevyellä otannalla.
 - **Pitkän aikavälin kehitys** = koko datan trendi
 - **Greta Koski + Greta Wedman + Greta Sahlberg**, **Pekka Peltola + Pekka Remes**, **Mia Paavola + Mia Vuorihovi** sekä **Kosti Raesola + Kosti Salonen** yhdistetään samoiksi pelaajiksi.
 - **Vuosi** päätellään kilpailu-ID:n kahdesta ensimmäisestä numerosta.
@@ -591,6 +621,7 @@ with tabs[4]:
 - **Trend** = linear slope of performance_score
 - **Current form** = mean performance_score of last 5 competitions
 - **Most competitions** = highest competition count
+- **Ranking lists default to a minimum of 3 competitions** so players with only 1–2 starts do not dominate the lists too easily.
 - **Long-term development** = trend over the full dataset
 - Name aliases are merged where needed.
 - **Score** = weighted combination:
