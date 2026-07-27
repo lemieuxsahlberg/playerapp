@@ -260,6 +260,23 @@ def safe_slope(values) -> float:
     return 0.0
 
 
+def trend_readable(slope: float) -> str:
+    if pd.isna(slope):
+        return "-"
+    pp = slope * 100
+    if slope >= 0.02:
+        label = "selvästi nousussa" if LANG == "Suomi" else "clearly rising"
+    elif slope >= 0.005:
+        label = "lievästi nousussa" if LANG == "Suomi" else "slightly rising"
+    elif slope <= -0.02:
+        label = "selvästi laskussa" if LANG == "Suomi" else "clearly declining"
+    elif slope <= -0.005:
+        label = "lievästi laskussa" if LANG == "Suomi" else "slightly declining"
+    else:
+        label = "tasainen" if LANG == "Suomi" else "stable"
+    return f"{label} ({pp:+.1f} %-yks./kisa)" if LANG == "Suomi" else f"{label} ({pp:+.1f} pp/start)"
+
+
 def compute_player_table(df: pd.DataFrame) -> pd.DataFrame:
     dfp = add_performance(df)
     top5 = dfp[dfp["rank"] <= 5].groupby("player_norm").size().reset_index(name="top5_finishes")
@@ -332,6 +349,10 @@ def hot_players_last_competitions(df: pd.DataFrame, latest_count: int = 5, min_s
         trend = safe_slope(y)
         top5 = int((sub["rank"] <= 5).sum())
         top5_rate = top5 / starts if starts else 0
+        latest3_raw = latest_raw[-3:]
+        sub_last3 = sub[sub["competition_raw"].isin(latest3_raw)].copy()
+        last3_starts = sub_last3["competition_raw"].nunique()
+        last3_top5 = int((sub_last3["rank"] <= 5).sum())
         best_rank = float(sub["rank"].min()) if len(sub) else np.nan
         avg_rank = float(sub["rank"].mean()) if len(sub) else np.nan
         hot_score = 0.65 * avg_perf + 0.25 * trend + 0.10 * top5_rate
@@ -343,6 +364,8 @@ def hot_players_last_competitions(df: pd.DataFrame, latest_count: int = 5, min_s
             "last5_trend": trend,
             "last5_starts": starts,
             "last5_top5": top5,
+            "last3_top5": last3_top5,
+            "last3_starts": last3_starts,
             "last5_best_rank": best_rank,
             "last5_avg_rank": avg_rank,
         })
@@ -482,16 +505,14 @@ with tabs[0]:
                         st.session_state["selected_player_norm"] = hot_row["player_norm"]
                     st.caption(t("open_player"))
                 with right:
-                    h1, h2, h3, h4 = st.columns(4)
+                    h1, h2, h3 = st.columns(3)
                     with h1:
-                        st.metric("Hot score", f"{hot_row['hot_score']:.3f}")
+                        st.metric("Kunto" if LANG == "Suomi" else "Form", f"{hot_row['last5_form']:.3f}")
                     with h2:
-                        st.metric("Form", f"{hot_row['last5_form']:.3f}")
+                        st.metric(t("trend"), trend_readable(float(hot_row["last5_trend"])))
                     with h3:
-                        st.metric(t("trend"), f"{hot_row['last5_trend']:+.4f}")
-                    with h4:
-                        st.metric("Top 5", f"{int(hot_row['last5_top5'])}/{int(hot_row['last5_starts'])}")
-                    st.caption(("Paras sijoitus viim. 5 kisassa: " if LANG == "Suomi" else "Best rank in latest 5: ") + str(int(hot_row["last5_best_rank"])))
+                        st.metric("Top 5 / 3 viim." if LANG == "Suomi" else "Top 5 / last 3", f"{int(hot_row['last3_top5'])}/{int(hot_row['last3_starts'])}")
+                    st.caption(("Paras sijoitus viidessä viimeisimmässä kisassa: " if LANG == "Suomi" else "Best rank in latest five competitions: ") + str(int(hot_row["last5_best_rank"])))
 
     if "selected_player_norm" in st.session_state:
         st.markdown("---")
