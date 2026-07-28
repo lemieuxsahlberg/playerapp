@@ -53,7 +53,7 @@ TEXT = {
     "open_player": {"Suomi": "Avaa pelaajan tiedot", "English": "Open player details"},
     "season_snapshot": {"Suomi": "Kauden kärkinimet 2026", "English": "Season highlights 2026"},
     "monthly_riser": {"Suomi": "Viiden viimeisimmän kisan nousija", "English": "Riser in the latest five competitions"},
-    "monthly_riser_note": {"Suomi": "Perustuu aina datan viiteen uusimpaan kilpailuun. Kun results.parquet päivittyy myöhemmin maanantaiajolla, myös tämä nostaa automaattisesti uusimman viiden kisan nousijan.", "English": "Always based on the five latest competitions in the data. When results.parquet is later updated by the Monday workflow, this automatically uses the newest five competitions."},
+    "monthly_riser_note": {"Suomi": "Suurin nousu viidessä viimeisimmässä kisassa.", "English": "Strongest rise in the latest five competitions."},
     "best_season_score": {"Suomi": "Paras 2026 score", "English": "Best 2026 score"},
     "season_top5": {"Suomi": "Eniten Top 5 vuonna 2026", "English": "Most Top 5 in 2026"},
     "season_active": {"Suomi": "Aktiivisin 2026", "English": "Most active 2026"},
