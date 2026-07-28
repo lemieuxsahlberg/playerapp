@@ -12,6 +12,7 @@ import streamlit as st
 
 APP_VERSION = "season_layout_v1"
 CURRENT_SEASON = 2026
+RECENT_COMPETITIONS_FOR_FORM = 5
 
 st.set_page_config(page_title="Pelaajahaku / Player Stats", layout="wide")
 
@@ -51,6 +52,8 @@ TEXT = {
     "quick_search": {"Suomi": "Pikahaku pelaajaan", "English": "Quick player search"},
     "open_player": {"Suomi": "Avaa pelaajan tiedot", "English": "Open player details"},
     "season_snapshot": {"Suomi": "Kauden kärkinimet 2026", "English": "Season highlights 2026"},
+    "monthly_riser": {"Suomi": "Viiden viimeisimmän kisan nousija", "English": "Riser in the latest five competitions"},
+    "monthly_riser_note": {"Suomi": "Perustuu aina datan viiteen uusimpaan kilpailuun. Kun results.parquet päivittyy myöhemmin maanantaiajolla, myös tämä nostaa automaattisesti uusimman viiden kisan nousijan.", "English": "Always based on the five latest competitions in the data. When results.parquet is later updated by the Monday workflow, this automatically uses the newest five competitions."},
     "best_season_score": {"Suomi": "Paras 2026 score", "English": "Best 2026 score"},
     "season_top5": {"Suomi": "Eniten Top 5 vuonna 2026", "English": "Most Top 5 in 2026"},
     "season_active": {"Suomi": "Aktiivisin 2026", "English": "Most active 2026"},
@@ -106,6 +109,7 @@ COL_LABELS = {
     "rank": {"Suomi": "Sijoitus", "English": "Rank"},
     "year": {"Suomi": "Vuosi", "English": "Year"},
     "score": {"Suomi": "Score", "English": "Score"},
+    "score_int": {"Suomi": "Score", "English": "Score"},
     "performance_score": {"Suomi": "Performance score", "English": "Performance score"},
     "hot_score": {"Suomi": "Hot score", "English": "Hot score"},
     "recent_form_score": {"Suomi": "Kunto", "English": "Form"},
@@ -120,6 +124,32 @@ def t(key: str) -> str:
 
 def localize_columns(df_in: pd.DataFrame) -> pd.DataFrame:
     return df_in.rename(columns={c: COL_LABELS[c][LANG] for c in df_in.columns if c in COL_LABELS})
+
+
+def top_with_ties(df_in: pd.DataFrame, sort_by, ascending, limit: Optional[int] = None, tie_col: Optional[str] = None) -> pd.DataFrame:
+    if isinstance(sort_by, str):
+        sort_by = [sort_by]
+    if isinstance(ascending, bool):
+        ascending = [ascending] * len(sort_by)
+    out = df_in.sort_values(sort_by, ascending=ascending).copy()
+    if limit is not None and tie_col and len(out) > limit:
+        cutoff = out.iloc[limit - 1][tie_col]
+        primary_ascending = ascending[sort_by.index(tie_col)] if tie_col in sort_by else ascending[0]
+        if primary_ascending:
+            out = out[out[tie_col] <= cutoff].copy()
+        else:
+            out = out[out[tie_col] >= cutoff].copy()
+    elif limit is not None:
+        out = out.head(limit).copy()
+    return out.reset_index(drop=True)
+
+
+def ranked_table(df_in: pd.DataFrame, sort_by, ascending, columns, limit: Optional[int] = None, tie_col: Optional[str] = None) -> pd.DataFrame:
+    out = top_with_ties(df_in, sort_by=sort_by, ascending=ascending, limit=limit, tie_col=tie_col)
+    out = out[[c for c in columns if c in out.columns]].copy()
+    rank_col = "Sija" if LANG == "Suomi" else "Rank"
+    out.insert(0, rank_col, range(1, len(out) + 1))
+    return localize_columns(out)
 
 
 def get_secret_value(name: str):
@@ -419,6 +449,7 @@ def compute_player_table(df: pd.DataFrame) -> pd.DataFrame:
         out = out.merge(ypivot, on="player_norm", how="left")
 
     out["score"] = 0.45 * out["avg_perf"] + 0.20 * out["top5_rate"] + 0.20 * out["consistency"] + 0.15 * out["trend_slope"]
+    out["score_int"] = pd.to_numeric(out["score"], errors="coerce").clip(lower=0, upper=1).mul(100).round().astype("Int64")
     return out.sort_values("score", ascending=False)
 
 
@@ -577,7 +608,7 @@ def render_player_profile(df: pd.DataFrame, players_table: pd.DataFrame, player_
             st.metric(t("top5"), int(season_row["top5_finishes"]))
 
     st.markdown(f"#### {t('recent_form')}")
-    recent = recent_stats_for_player(df, player_norm, latest_count=5)
+    recent = recent_stats_for_player(df, player_norm, latest_count=RECENT_COMPETITIONS_FOR_FORM)
     r1, r2, r3 = st.columns(3)
     with r1:
         st.metric(t("form"), form_percent(recent["form"]))
@@ -598,7 +629,7 @@ def render_player_profile(df: pd.DataFrame, players_table: pd.DataFrame, player_
     with c4:
         st.metric(t("top5"), int(row["top5_finishes"]))
 
-    year_cols = sorted([c for c in row.index if str(c).startswith("starts_")], key=lambda x: int(str(x).split("_")[1]))
+    year_cols = sorted([c for c in row.index if str(c).startswith("starts_") and float(row.get(c, 0) or 0) > 0], key=lambda x: int(str(x).split("_")[1]))
     if year_cols:
         st.markdown(f"##### {t('starts_by_year')}")
         year_card_cols = st.columns(min(4, len(year_cols)))
@@ -613,7 +644,7 @@ def render_player_profile(df: pd.DataFrame, players_table: pd.DataFrame, player_
     if not ts.empty:
         st.line_chart(ts.set_index("competition")["performance_score"])
     st.markdown(f"##### {t('recent_results')}")
-    st.dataframe(localize_columns(ts.tail(30)), use_container_width=True)
+    st.dataframe(localize_columns(ts.tail(30).reset_index(drop=True)), use_container_width=True, hide_index=True)
 
 
 try:
@@ -647,7 +678,7 @@ with tabs[0]:
         st.markdown(metric_card(t("rows"), total_rows), unsafe_allow_html=True)
 
     st.markdown(f"### {t('hot_now')}")
-    hot_df, latest_hot_competitions = hot_players_last_competitions(df, latest_count=5, min_starts=2)
+    hot_df, latest_hot_competitions = hot_players_last_competitions(df, latest_count=RECENT_COMPETITIONS_FOR_FORM, min_starts=2)
     st.caption(t("hot_now_note"))
     if hot_df.empty:
         st.info("Kuumimpien pelaajien laskentaan ei löytynyt dataa." if LANG == "Suomi" else "No data available for hottest players.")
@@ -674,6 +705,24 @@ with tabs[0]:
                         st.markdown("<div class='metric-label'>Virekäyrä</div>" if LANG == "Suomi" else "<div class='metric-label'>Sparkline</div>", unsafe_allow_html=True)
                         st.markdown(f"<div class='sparkline'>{hot_row['spark']}</div>", unsafe_allow_html=True)
 
+    st.markdown(f"### {t('monthly_riser')}")
+    st.caption(t("monthly_riser_note"))
+    if hot_df.empty:
+        st.info("Viiden viimeisimmän kisan nousijaa ei löytynyt datasta." if LANG == "Suomi" else "No riser found from the latest five competitions.")
+    else:
+        riser_candidates = hot_df[hot_df["recent_trend"] > 0].copy()
+        if riser_candidates.empty:
+            riser_candidates = hot_df.copy()
+        riser = riser_candidates.sort_values(["recent_trend", "recent_form_score"], ascending=False).iloc[0]
+        st.markdown(
+            highlight_metric_card(
+                t("monthly_riser"),
+                f"{riser['player']}<br><span style='font-size:1rem;'>Trendi {riser['recent_trend_display']} · Kunto {form_percent(riser['recent_form_score'])} · {riser['spark']}</span>",
+                "#f97316",
+            ),
+            unsafe_allow_html=True,
+        )
+
     st.markdown(f"### {t('season_snapshot')}")
     season_df = df[pd.to_numeric(df["year"], errors="coerce") == CURRENT_SEASON].copy()
     if season_df.empty:
@@ -688,7 +737,7 @@ with tabs[0]:
         active_season = season_players.sort_values("tournaments", ascending=False).iloc[0]
         s1, s2, s3 = st.columns(3)
         with s1:
-            st.markdown(highlight_metric_card(t("best_season_score"), f"{best_season['player']}<br><span style='font-size:1rem;'>Score {best_season['score']:.3f}</span>", "#2563eb"), unsafe_allow_html=True)
+            st.markdown(highlight_metric_card(t("best_season_score"), f"{best_season['player']}<br><span style='font-size:1rem;'>Score {int(best_season['score_int'])}</span>", "#2563eb"), unsafe_allow_html=True)
         with s2:
             st.markdown(highlight_metric_card(t("season_top5"), f"{top5_season['player']}<br><span style='font-size:1rem;'>{int(top5_season['top5_finishes'])} Top 5</span>", "#16a34a"), unsafe_allow_html=True)
         with s3:
@@ -730,13 +779,13 @@ with tabs[1]:
         season_players = season_players[season_players["tournaments"] >= min_season_starts].copy()
         recent_rows = []
         for pn in season_players["player_norm"].tolist():
-            recent = recent_stats_for_player(season_df, pn, latest_count=5)
+            recent = recent_stats_for_player(season_df, pn, latest_count=RECENT_COMPETITIONS_FOR_FORM)
             recent_rows.append((pn, recent["form"], trend_symbol_value(recent["trend"]), recent["top5_last3"], recent["starts_last3"], recent["spark"]))
         recent_df = pd.DataFrame(recent_rows, columns=["player_norm", "recent_form_score", "recent_trend", "last3_top5", "last3_starts", "spark"])
         season_players = season_players.merge(recent_df, on="player_norm", how="left")
         season_players["recent_form_pct"] = season_players["recent_form_score"].apply(form_percent)
-        display_cols = ["player", "score", "tournaments", "avg_rank", "best_rank", "top5_finishes", "recent_form_pct", "recent_trend"]
-        st.dataframe(localize_columns(season_players.sort_values("score", ascending=False)[display_cols]), use_container_width=True)
+        display_cols = ["player", "score_int", "tournaments", "avg_rank", "best_rank", "top5_finishes", "recent_form_pct", "recent_trend"]
+        st.dataframe(ranked_table(season_players, ["score_int", "top5_finishes", "tournaments"], [False, False, False], display_cols, limit=None), use_container_width=True, hide_index=True)
 
 with tabs[2]:
     st.markdown(f"## {t('player_search')}")
@@ -781,7 +830,7 @@ with tabs[3]:
         qualified_players = players_table.copy()
     st.caption(t("qualified_note"))
     st.markdown(f"### {t('score_label')}")
-    st.dataframe(localize_columns(qualified_players.sort_values("score", ascending=False)[["player", "score", "avg_rank", "top5_rate", "consistency", "tournaments"]].head(50)), use_container_width=True)
+    st.dataframe(ranked_table(qualified_players, ["score_int", "top5_rate", "tournaments"], [False, False, False], ["player", "score_int", "avg_rank", "top5_rate", "consistency", "tournaments"], limit=50, tie_col="score_int"), use_container_width=True, hide_index=True)
     st.markdown(f"### {t('yearly_top')}")
     st.caption(t("yearly_top_note"))
     recent_years = recent_years_from_data(df, count=4)
@@ -798,19 +847,19 @@ with tabs[3]:
                 y1, y2, y3 = st.columns(3)
                 with y1:
                     st.markdown("#### Score")
-                    st.dataframe(localize_columns(year_players.sort_values("score", ascending=False)[["player", "score", "avg_rank", "top5_rate", "tournaments"]].head(10)), use_container_width=True)
+                    st.dataframe(ranked_table(year_players, ["score_int", "top5_rate", "tournaments"], [False, False, False], ["player", "score_int", "avg_rank", "top5_rate", "tournaments"], limit=10, tie_col="score_int"), use_container_width=True, hide_index=True)
                 with y2:
                     st.markdown(f"#### {t('most_top5')}")
-                    st.dataframe(localize_columns(year_players.sort_values(["top5_finishes", "top5_rate"], ascending=False)[["player", "top5_finishes", "top5_rate", "tournaments"]].head(10)), use_container_width=True)
+                    st.dataframe(ranked_table(year_players, ["top5_finishes", "top5_rate", "tournaments"], [False, False, False], ["player", "top5_finishes", "top5_rate", "tournaments"], limit=10, tie_col="top5_finishes"), use_container_width=True, hide_index=True)
                 with y3:
                     st.markdown(f"#### {t('best_avg_rank')}")
-                    st.dataframe(localize_columns(year_players.sort_values("avg_rank", ascending=True)[["player", "avg_rank", "best_rank", "tournaments"]].head(10)), use_container_width=True)
+                    st.dataframe(ranked_table(year_players, ["avg_rank", "tournaments"], [True, False], ["player", "avg_rank", "best_rank", "tournaments"], limit=10, tie_col="avg_rank"), use_container_width=True, hide_index=True)
     st.markdown(f"### {t('most_top5')}")
-    st.dataframe(localize_columns(qualified_players.sort_values("top5_finishes", ascending=False)[["player", "top5_finishes", "top5_rate", "tournaments", "best_rank", "consistency"]].head(50)), use_container_width=True)
+    st.dataframe(ranked_table(qualified_players, ["top5_finishes", "top5_rate", "tournaments"], [False, False, False], ["player", "top5_finishes", "top5_rate", "tournaments", "best_rank", "consistency"], limit=50, tie_col="top5_finishes"), use_container_width=True, hide_index=True)
     st.markdown(f"### {t('best_avg_rank')}")
-    st.dataframe(localize_columns(qualified_players.sort_values("avg_rank", ascending=True)[["player", "avg_rank", "best_rank", "top5_rate", "consistency", "tournaments"]].head(50)), use_container_width=True)
+    st.dataframe(ranked_table(qualified_players, ["avg_rank", "tournaments"], [True, False], ["player", "avg_rank", "best_rank", "top5_rate", "consistency", "tournaments"], limit=50, tie_col="avg_rank"), use_container_width=True, hide_index=True)
     st.markdown(f"### {t('most_active')}")
-    st.dataframe(localize_columns(players_table.sort_values("tournaments", ascending=False)[["player", "tournaments", "best_rank", "avg_rank", "top5_rate"]].head(50)), use_container_width=True)
+    st.dataframe(ranked_table(players_table, ["tournaments", "best_rank"], [False, True], ["player", "tournaments", "best_rank", "avg_rank", "top5_rate"], limit=50, tie_col="tournaments"), use_container_width=True, hide_index=True)
     st.markdown(f"### {t('long_term_dev')}")
     ranking_query = st.text_input(t("search_players"), "")
     if ranking_query and len(ranking_query.strip()) >= 2:
@@ -824,7 +873,7 @@ with tabs[3]:
     if ranking_query:
         qn = norm_name(ranking_query)
         overall_trend = overall_trend[overall_trend["player_search_key"].str.contains(qn, na=False)].copy()
-    st.dataframe(localize_columns(overall_trend[["player", "trend_slope", "current_form", "top5_rate", "consistency", "tournaments"]].head(100)), use_container_width=True)
+    st.dataframe(ranked_table(overall_trend, ["trend_slope", "current_form"], [False, False], ["player", "trend_slope", "current_form", "top5_rate", "consistency", "tournaments"], limit=100, tie_col="trend_slope"), use_container_width=True, hide_index=True)
 
 with tabs[4]:
     st.markdown(f"## {t('comparison_trends')}")
@@ -873,7 +922,7 @@ with tabs[5]:
 - **Trendi** = lineaarinen trendi performance scorelle
 - **Kunto** = viimeisten kilpailujen performance score -keskiarvo prosentteina
 - **Top-listoissa oletusminimi on 3 kilpailua**, jotta 1–2 kisan pelaajat eivät nouse listojen kärkeen liian kevyellä otannalla.
-- **Tämän hetken kuumimmat pelaajat** = viiden uusimman kilpailun perusteella. Näytössä: kunto prosentteina, trendi (%-yksikköä/kisa) ja virekäyrä.
+- **Viime kisojen viremittari** ja **viiden viimeisimmän kisan nousija** perustuvat aina datan viiteen uusimpaan kilpailuun. Kun data päivittyy, myös nämä nostot päivittyvät uuden viiden kisan jakson mukaan.
 - **Pitkän aikavälin kehitys** = koko datan trendi
 - **Vuosi** päätellään kilpailu-ID:n kahdesta ensimmäisestä numerosta.
 - **Score** = painotettu yhdistelmä: 45 % avg_perf, 20 % top5_rate, 20 % consistency ja 15 % trend_slope.
@@ -891,7 +940,7 @@ with tabs[5]:
 - **Trend** = linear slope of performance score
 - **Form** = recent average performance score shown as a percentage
 - **Ranking lists default to a minimum of 3 competitions** so players with only 1–2 starts do not dominate the lists too easily.
-- **Hottest players right now** = based on the five latest competitions: form percentage, trend and sparkline.
+- **Recent form meter** and **riser in the latest five competitions** are always based on the five latest competitions in the data. When the data updates, these highlights update using the newest five-competition window.
 - **Long-term development** = trend over the full dataset
 - **Score** = weighted combination: 45% avg_perf, 20% top5_rate, 20% consistency and 15% trend_slope.
             """
