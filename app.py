@@ -92,6 +92,7 @@ TEXT = {
     "no_data": {"Suomi": "Dataa ei löytynyt.", "English": "No data found."},
     "no_matches": {"Suomi": "Ei osumia — näytetään koko lista.", "English": "No matches — showing full list."},
     "footer": {"Suomi": "© 2026 Greta Sahlberg – Kaikki oikeudet pidätetään.", "English": "© 2026 Greta Sahlberg – All rights reserved."},
+    "disclaimer": {"Suomi": "Epävirallinen harrasteprojekti. Sivusto kokoaa ja visualisoi julkisesti saatavilla olevia ratagolftuloksia. Alkuperäiset tulokset ovat MRS.fi-palvelussa. Sivusto ei ole MRS.fi:n, Suomen Ratagolfliiton tai kilpailunjärjestäjien virallinen palvelu. Jos huomaat virheen tai haluat tietojasi käsiteltävän, ota yhteyttä ylläpitäjään.", "English": "Unofficial hobby project. This site collects and visualizes publicly available minigolf results. Original results are available on MRS.fi. This site is not an official service of MRS.fi, the Finnish Minigolf Federation or competition organizers. If you notice an error or want your data handled, contact the maintainer."},
 }
 
 COL_LABELS = {
@@ -922,7 +923,7 @@ with tabs[5]:
 - **Trendi** = lineaarinen trendi performance scorelle
 - **Kunto** = viimeisten kilpailujen performance score -keskiarvo prosentteina
 - **Top-listoissa oletusminimi on 3 kilpailua**, jotta 1–2 kisan pelaajat eivät nouse listojen kärkeen liian kevyellä otannalla.
-- **Viime kisojen viremittari** ja **viiden viimeisimmän kisan nousija** perustuvat aina datan viiteen uusimpaan kilpailuun. Kun data päivittyy, myös nämä nostot päivittyvät uuden viiden kisan jakson mukaan.
+- **Viime kisojen viremittari** ja **viiden viimeisimmän kisan nousija** perustuvat datan viiteen uusimpaan kilpailuun.
 - **Pitkän aikavälin kehitys** = koko datan trendi
 - **Vuosi** päätellään kilpailu-ID:n kahdesta ensimmäisestä numerosta.
 - **Score** = painotettu yhdistelmä: 45 % avg_perf, 20 % top5_rate, 20 % consistency ja 15 % trend_slope.
@@ -940,11 +941,12 @@ with tabs[5]:
 - **Trend** = linear slope of performance score
 - **Form** = recent average performance score shown as a percentage
 - **Ranking lists default to a minimum of 3 competitions** so players with only 1–2 starts do not dominate the lists too easily.
-- **Recent form meter** and **riser in the latest five competitions** are always based on the five latest competitions in the data. When the data updates, these highlights update using the newest five-competition window.
+- **Recent form meter** and **riser in the latest five competitions** are based on the five latest competitions in the data.
 - **Long-term development** = trend over the full dataset
 - **Score** = weighted combination: 45% avg_perf, 20% top5_rate, 20% consistency and 15% trend_slope.
             """
         )
 
 st.markdown("---")
+st.caption(t("disclaimer"))
 st.caption(t("footer"))
