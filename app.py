@@ -969,36 +969,168 @@ with tabs[5]:
     if LANG == "Suomi":
         st.markdown(
             """
-- **Paras sijoitus** = pienin rank
-- **Sijoituskeskiarvo** = sijoitusten keskiarvo
-- **Top 5** = montako kertaa rank ≤ 5
-- **Top 5 -osuus** = top5 / starts
-- **Performance score** = `1 − (rank−1)/(field_size−1)`
-- **Tasaisuus** = `1 − std(performance_score)`
-- **Trendi** = lineaarinen trendi performance scorelle
-- **Kunto** = viimeisten kilpailujen performance score -keskiarvo prosentteina
-- **Top-listoissa oletusminimi on 3 kilpailua**, jotta 1–2 kisan pelaajat eivät nouse listojen kärkeen liian kevyellä otannalla.
-- **Viime kisojen viremittari** ja **viiden viimeisimmän kisan nousija** perustuvat datan viiteen uusimpaan kilpailuun.
-- **Pitkän aikavälin kehitys** = koko datan trendi
-- **Vuosi** päätellään kilpailu-ID:n kahdesta ensimmäisestä numerosta.
-- **Score** = painotettu yhdistelmä: 45 % avg_perf, 20 % top5_rate, 20 % consistency ja 15 % trend_slope.
+### Näin tilastot lasketaan
+
+Sivuston tilastot perustuvat MRS-tuloksista koottuun aineistoon. Laskennan tavoitteena on tuottaa vertailukelpoisia tunnuslukuja pelaajien kilpailumenestyksestä, viimeaikaisesta vireestä ja pitkän aikavälin kehityksestä.
+
+#### Perusluvut
+
+**Paras sijoitus**  
+Pelaajan paras yksittäinen sijoitus aineistossa. Mitä pienempi luku, sitä parempi sijoitus.
+
+**Sijoituskeskiarvo**  
+Pelaajan kaikkien sijoitusten aritmeettinen keskiarvo. Pienempi sijoituskeskiarvo kuvaa keskimäärin parempaa sijoitustasoa.
+
+**Top 5**  
+Niiden kilpailujen lukumäärä, joissa pelaaja on sijoittunut viiden parhaan joukkoon.
+
+**Top 5 -osuus**  
+Top 5 -sijoitusten osuus pelaajan kaikista kilpailuista.
+
+Kaava:  
+`Top 5 -osuus = Top 5 -sijoitusten määrä / kilpailujen määrä`
+
+Esimerkki:  
+Top 5 -osuus 50 % tarkoittaa, että pelaaja on sijoittunut viiden parhaan joukkoon joka toisessa kilpailussaan.
+
+**Kilpailumäärä**  
+Niiden kilpailujen lukumäärä, joissa pelaaja on mukana aineistossa. Top-listoissa käytetään oletusarvoisesti vähintään kolmen kilpailun rajaa, jotta yksittäinen poikkeuksellisen hyvä tulos ei vaikuta listojen kärkeen suhteettoman paljon.
+
+#### Suoritustaso
+
+**Performance score**  
+Performance score muuntaa sijoituksen vertailukelpoiseksi eri kokoisissa kilpailuissa. Mittari huomioi sekä pelaajan sijoituksen että kilpailun osallistujamäärän.
+
+Kaava:  
+`Performance score = 1 − (sijoitus − 1) / (osallistujamäärä − 1)`
+
+Asteikko:  
+`1,00` = kilpailun voitto  
+`0,50` = noin osallistujajoukon keskitaso  
+`0,00` = viimeinen sijoitus
+
+Näkymissä sama arvo voidaan esittää prosentteina:  
+`100 %` = voitto  
+`50 %` = noin keskivaiheen sijoitus  
+`0 %` = viimeinen sijoitus
+
+**Kunto**  
+Kunto kuvaa pelaajan viimeaikaista suoritustasoa. Se lasketaan viimeisimpien kilpailujen performance score -arvojen keskiarvona ja esitetään prosentteina.
+
+Kaava:  
+`Kunto = keskiarvo(viimeisimpien kilpailujen performance score -arvot) × 100`
+
+Esimerkki:  
+Kunto 82 % tarkoittaa, että pelaajan viimeaikainen suoritustaso on ollut keskimäärin 82 prosenttia asteikolla, jossa 100 % vastaa kilpailun voittoa.
+
+**Trendi**  
+Trendi kuvaa performance score -arvojen kehityssuuntaa tarkastelujakson aikana. Trendi lasketaan sovittamalla performance score -arvoihin lineaarinen trendiviiva aikajärjestyksessä.
+
+Kaava:  
+`Trendi = lineaarisen trendiviivan kulmakerroin × 100`
+
+Tulkinta:  
+`↗ +1.2` tarkoittaa, että pelaajan suoritustaso on noussut keskimäärin 1,2 prosenttiyksikköä kilpailua kohti.  
+`→ +0.1` tarkoittaa, että pelaajan suoritustaso on pysynyt lähes samalla tasolla.  
+`↘ -0.8` tarkoittaa, että pelaajan suoritustaso on laskenut keskimäärin 0,8 prosenttiyksikköä kilpailua kohti.
+
+#### Viime kisojen viremittari
+
+Viime kisojen viremittari perustuu aineiston viiteen uusimpaan kilpailuun. Mittarin tarkoituksena on kuvata pelaajien ajankohtaista suoritustasoa ja lähiajan kehityssuuntaa.
+
+Viremittarissa käytetään seuraavia tunnuslukuja:
+
+- **Kunto** = viimeaikainen keskimääräinen performance score prosentteina
+- **Trendi** = performance score -arvojen kehityssuunta viiden uusimman kilpailun jaksolla
+- **Virekäyrä** = visuaalinen esitys viimeisimmistä performance score -arvoista
+
+**Viiden viimeisimmän kisan nousija**  
+Nousija on pelaaja, jonka performance score -arvojen positiivinen trendi on suurin viiden uusimman kilpailun tarkastelujaksolla.
+
+Kaava:  
+`Nousija = pelaaja, jolla on suurin positiivinen trendiarvo viiden uusimman kilpailun jaksolla`
+
+#### Tasaisuus ja kehitys
+
+**Tasaisuus**  
+Tasaisuus kuvaa pelaajan suoritustason vaihtelua kilpailusta toiseen. Mitä pienempi performance score -arvojen hajonta on, sitä tasaisempi pelaaja on.
+
+Kaava:  
+`Tasaisuus = 1 − keskihajonta(performance score)`
+
+Tasaisuus näkyy Top-listat-välilehden taulukoissa ja vaikuttaa myös Score-lukuun.
+
+**Pitkän aikavälin kehitys**  
+Pitkän aikavälin kehitys kuvaa pelaajan performance score -arvojen trendiä koko aineistossa. Tämä mittari kuvaa uran tai aineistossa näkyvän jakson yleistä kehityssuuntaa, eikä sitä tule tulkita samaksi asiaksi kuin ajankohtainen vire.
+
+#### Score
+
+Score on koontiluku, joka yhdistää useita pelaajan suorituskykyä kuvaavia tunnuslukuja. Score esitetään asteikolla 0–100. Mitä suurempi Score, sitä vahvempi kokonaisnäyttö aineiston perusteella.
+
+Score muodostuu neljästä osatekijästä:
+
+- 45 % keskimääräinen suoritustaso
+- 20 % Top 5 -osuus
+- 20 % tasaisuus
+- 15 % kehityssuunta
+
+Kaava:  
+`Score = 100 × (0,45 × keskimääräinen suoritustaso + 0,20 × Top 5 -osuus + 0,20 × tasaisuus + 0,15 × kehityssuunta)`
+
+Score pyöristetään kokonaisluvuksi.
+
+#### Vuosi
+
+Vuosi päätellään kilpailu-ID:n kahdesta ensimmäisestä numerosta. Esimerkiksi kilpailu-ID:n alku `26` tulkitaan vuodeksi 2026.
             """
         )
     else:
         st.markdown(
             """
-- **Best rank** = lowest rank
-- **Average rank** = mean rank
-- **Top 5** = number of times rank ≤ 5
-- **Top 5 rate** = top5 / starts
-- **Performance score** = `1 − (rank−1)/(field_size−1)`
-- **Consistency** = `1 − std(performance_score)`
-- **Trend** = linear slope of performance score
-- **Form** = recent average performance score shown as a percentage
-- **Ranking lists default to a minimum of 3 competitions** so players with only 1–2 starts do not dominate the lists too easily.
-- **Recent form meter** and **riser in the latest five competitions** are based on the five latest competitions in the data.
-- **Long-term development** = trend over the full dataset
-- **Score** = weighted combination: 45% avg_perf, 20% top5_rate, 20% consistency and 15% trend_slope.
+### How the numbers are calculated
+
+The statistics are based on result data collected from MRS. The purpose of the calculations is to produce comparable indicators for competition performance, recent form and long-term development.
+
+**Best rank** = the player's best single rank in the dataset. Lower is better.  
+**Average rank** = arithmetic mean of the player's ranks. Lower is better.  
+**Top 5** = number of competitions where the player finished in the top five.  
+**Top 5 rate** = Top 5 finishes divided by total starts.
+
+**Performance score** normalizes rank across competitions of different field sizes:
+
+`Performance score = 1 − (rank − 1) / (field size − 1)`
+
+`1.00` = win, `0.50` = approximately mid-field, `0.00` = last place.
+
+**Form** is the recent average performance score shown as a percentage:
+
+`Form = average(recent performance score values) × 100`
+
+**Trend** is the slope of a linear trend line fitted to performance score values in chronological order:
+
+`Trend = linear trend slope × 100`
+
+For example, `↗ +1.2` means that the player's performance level has increased by approximately 1.2 percentage points per competition during the inspected period.
+
+**Recent form meter** is based on the five latest competitions in the dataset and uses form, trend and sparkline.
+
+**Riser in the latest five competitions** is the player with the highest positive trend over the five-latest-competition window.
+
+**Consistency** measures variation in performance score:
+
+`Consistency = 1 − standard deviation(performance score)`
+
+Consistency is shown in ranking tables and contributes to Score.
+
+**Long-term development** is the trend of performance score over the full dataset. It should not be interpreted as the same measure as recent form.
+
+**Score** is a composite indicator shown on a 0–100 scale:
+
+`Score = 100 × (0.45 × average performance + 0.20 × Top 5 rate + 0.20 × consistency + 0.15 × trend)`
+
+The Score is rounded to an integer.
+
+**Year** is inferred from the first two digits of the competition ID. For example, an ID beginning with `26` is interpreted as 2026.
             """
         )
 
