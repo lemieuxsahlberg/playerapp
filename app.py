@@ -381,12 +381,17 @@ def load_data(path="results.parquet", version="season_dashboard_v1") -> pd.DataF
         "kosti raesola": "salonen kosti",
         "salonen kosti": "salonen kosti",
         "kosti salonen": "salonen kosti",
+        "parkatti outi": "ojala outi",
+        "outi parkatti": "ojala outi",
+        "ojala outi": "ojala outi",
+        "outi ojala": "ojala outi",
     }
     df["player_norm"] = df["player_norm"].replace(alias_map)
     df.loc[df["player_norm"] == "sahlberg greta", "player"] = "Greta Sahlberg"
     df.loc[df["player_norm"] == "remes pekka", "player"] = "Pekka Remes"
     df.loc[df["player_norm"] == "vuorihovi mia", "player"] = "Mia Vuorihovi"
     df.loc[df["player_norm"] == "salonen kosti", "player"] = "Kosti Salonen"
+    df.loc[df["player_norm"] == "ojala outi", "player"] = "Outi Ojala"
 
     excluded_norms = {"erik hjalmarsson", "hjalmarsson erik"}
     df = df[~df["player_norm"].isin(excluded_norms)].copy()
@@ -734,7 +739,7 @@ players_table = compute_player_table(df)
 df_perf = add_performance(df)
 
 st.title(t("title"))
-tabs = st.tabs([t("overview"), t("season"), t("player_search"), t("rankings"), t("trends"), t("calculation"), t("admin")])
+tabs = st.tabs([t("overview"), t("season"), t("player_search"), t("rankings"), t("trends"), t("calculation")])
 
 with tabs[0]:
     st.markdown(f"## {t('overview')}")
@@ -1133,9 +1138,6 @@ The Score is rounded to an integer.
 **Year** is inferred from the first two digits of the competition ID. For example, an ID beginning with `26` is interpreted as 2026.
             """
         )
-
-with tabs[6]:
-    render_admin_view()
 
 st.markdown("---")
 st.caption(t("disclaimer"))
