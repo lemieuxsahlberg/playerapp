@@ -44,6 +44,7 @@ TEXT = {
     "rankings": {"Suomi": "Top-listat", "English": "Rankings"},
     "trends": {"Suomi": "Trendit", "English": "Trends"},
     "calculation": {"Suomi": "Laskentaperusteet", "English": "How the numbers are calculated"},
+    "admin": {"Suomi": "Ylläpito", "English": "Admin"},
     "players": {"Suomi": "Pelaajia", "English": "Players"},
     "competitions": {"Suomi": "Kilpailuja", "English": "Competitions"},
     "rows": {"Suomi": "Tulosrivejä", "English": "Result rows"},
@@ -92,7 +93,7 @@ TEXT = {
     "no_data": {"Suomi": "Dataa ei löytynyt.", "English": "No data found."},
     "no_matches": {"Suomi": "Ei osumia — näytetään koko lista.", "English": "No matches — showing full list."},
     "footer": {"Suomi": "© 2026 Greta Sahlberg – Kaikki oikeudet pidätetään.", "English": "© 2026 Greta Sahlberg – All rights reserved."},
-    "disclaimer": {"Suomi": "Tulosten lähde: MRS.fi. Sivusto tarjoaa tilastonäkymiä julkisesti saatavilla oleviin ratagolftuloksiin. Mahdollisista virheistä tai korjaustarpeista voi ilmoittaa ylläpitäjälle.", "English": "This site collects and visualizes publicly available minigolf results. Original results are available on MRS.fi. This site is not an official service of MRS.fi, the Finnish Minigolf Federation or competition organizers. If you notice an error or want your data handled, contact the maintainer."},
+    "disclaimer": {"Suomi": "Tulosten lähde: MRS.fi. Sivusto kokoaa ja visualisoi julkisesti saatavilla olevia ratagolftuloksia. Mahdollisista virheistä voi ilmoittaa ylläpitäjälle.", "English": "Results source: MRS.fi. This site collects and visualizes publicly available minigolf results. Possible errors can be reported to the maintainer."},
 }
 
 COL_LABELS = {
@@ -648,6 +649,76 @@ def render_player_profile(df: pd.DataFrame, players_table: pd.DataFrame, player_
     st.dataframe(localize_columns(ts.tail(30).reset_index(drop=True)), use_container_width=True, hide_index=True)
 
 
+def fetch_admin_rpc(function_name: str) -> tuple[pd.DataFrame, str]:
+    url = get_secret_value("SUPABASE_URL")
+    key = get_secret_value("SUPABASE_ANON_KEY")
+    if not url or not key:
+        return pd.DataFrame(), "SUPABASE_URL tai SUPABASE_ANON_KEY puuttuu Streamlit Secretsistä."
+
+    try:
+        response = requests.post(
+            f"{str(url).rstrip('/')}/rest/v1/rpc/{function_name}",
+            headers={
+                "apikey": key,
+                "Authorization": f"Bearer {key}",
+                "Content-Type": "application/json",
+            },
+            json={},
+            timeout=5,
+        )
+        if not (200 <= response.status_code < 300):
+            return pd.DataFrame(), f"{response.status_code}: {response.text[:500]}"
+        data = response.json()
+        return pd.DataFrame(data), "OK"
+    except Exception as exc:
+        return pd.DataFrame(), str(exc)[:500]
+
+
+def render_admin_view() -> None:
+    st.markdown(f"## {t('admin')}")
+    admin_password = get_secret_value("ADMIN_PASSWORD")
+    if not admin_password:
+        st.info("Lisää Streamlit Secretsiin ADMIN_PASSWORD, jotta ylläpitonäkymä voidaan ottaa käyttöön.")
+        return
+
+    given = st.text_input("Ylläpitäjän salasana", type="password")
+    if given != admin_password:
+        st.caption("Tämä näkymä on vain ylläpitäjän käyttöön.")
+        return
+
+    st.success("Ylläpitonäkymä avattu")
+    c1, c2 = st.columns(2)
+
+    with c1:
+        st.markdown("### Kiinnostavimmat pelaajat")
+        players_df, players_status = fetch_admin_rpc("popular_players")
+        if players_status != "OK":
+            st.error(players_status)
+        elif players_df.empty:
+            st.info("Ei vielä dataa.")
+        else:
+            st.dataframe(players_df, use_container_width=True, hide_index=True)
+
+    with c2:
+        st.markdown("### Suosituimmat haut")
+        queries_df, queries_status = fetch_admin_rpc("popular_queries")
+        if queries_status != "OK":
+            st.error(queries_status)
+        elif queries_df.empty:
+            st.info("Ei vielä dataa.")
+        else:
+            st.dataframe(queries_df, use_container_width=True, hide_index=True)
+
+    st.markdown("### Viimeisimmät tapahtumat")
+    events_df, events_status = fetch_admin_rpc("recent_search_events")
+    if events_status != "OK":
+        st.error(events_status)
+    elif events_df.empty:
+        st.info("Ei vielä dataa.")
+    else:
+        st.dataframe(events_df, use_container_width=True, hide_index=True)
+
+
 try:
     df = load_data()
 except Exception as exc:
@@ -663,7 +734,7 @@ players_table = compute_player_table(df)
 df_perf = add_performance(df)
 
 st.title(t("title"))
-tabs = st.tabs([t("overview"), t("season"), t("player_search"), t("rankings"), t("trends"), t("calculation")])
+tabs = st.tabs([t("overview"), t("season"), t("player_search"), t("rankings"), t("trends"), t("calculation"), t("admin")])
 
 with tabs[0]:
     st.markdown(f"## {t('overview')}")
@@ -895,22 +966,6 @@ with tabs[4]:
 with tabs[5]:
     st.markdown(f"## {t('calculation')}")
 
-    with st.expander("Lokitusdiagnostiikka" if LANG == "Suomi" else "Logging diagnostics"):
-        has_url = bool(get_secret_value("SUPABASE_URL"))
-        has_key = bool(get_secret_value("SUPABASE_ANON_KEY"))
-        st.write({
-            "SUPABASE_URL löytyy": has_url,
-            "SUPABASE_ANON_KEY löytyy": has_key,
-            "viimeisin_status": st.session_state.get("analytics_last_status", "ei vielä testattu"),
-            "viimeisin_viesti": st.session_state.get("analytics_last_error", ""),
-        })
-        if st.button("Testaa lokitusta" if LANG == "Suomi" else "Test logging"):
-            ok = log_event("diagnostic_test", query="test")
-            if ok:
-                st.success("Lokitus onnistui. Tarkista Supabase → Table Editor → search_logs.")
-            else:
-                st.error("Lokitus ei onnistunut. Katso status ja viesti yllä, ja aja tarvittaessa SQL uudestaan.")
-
     if LANG == "Suomi":
         st.markdown(
             """
@@ -946,6 +1001,9 @@ with tabs[5]:
 - **Score** = weighted combination: 45% avg_perf, 20% top5_rate, 20% consistency and 15% trend_slope.
             """
         )
+
+with tabs[6]:
+    render_admin_view()
 
 st.markdown("---")
 st.caption(t("disclaimer"))
