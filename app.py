@@ -92,7 +92,7 @@ TEXT = {
     "no_data": {"Suomi": "Dataa ei löytynyt.", "English": "No data found."},
     "no_matches": {"Suomi": "Ei osumia — näytetään koko lista.", "English": "No matches — showing full list."},
     "footer": {"Suomi": "© 2026 Greta Sahlberg – Kaikki oikeudet pidätetään.", "English": "© 2026 Greta Sahlberg – All rights reserved."},
-    "disclaimer": {"Suomi": "Epävirallinen harrasteprojekti. Sivusto kokoaa ja visualisoi julkisesti saatavilla olevia ratagolftuloksia. Alkuperäiset tulokset ovat MRS.fi-palvelussa. Sivusto ei ole MRS.fi:n, Suomen Ratagolfliiton tai kilpailunjärjestäjien virallinen palvelu. Jos huomaat virheen tai haluat tietojasi käsiteltävän, ota yhteyttä ylläpitäjään.", "English": "Unofficial hobby project. This site collects and visualizes publicly available minigolf results. Original results are available on MRS.fi. This site is not an official service of MRS.fi, the Finnish Minigolf Federation or competition organizers. If you notice an error or want your data handled, contact the maintainer."},
+    "disclaimer": {"Suomi": "Tulosten lähde: MRS.fi. Sivusto tarjoaa tilastonäkymiä julkisesti saatavilla oleviin ratagolftuloksiin. Mahdollisista virheistä tai korjaustarpeista voi ilmoittaa ylläpitäjälle.", "English": "This site collects and visualizes publicly available minigolf results. Original results are available on MRS.fi. This site is not an official service of MRS.fi, the Finnish Minigolf Federation or competition organizers. If you notice an error or want your data handled, contact the maintainer."},
 }
 
 COL_LABELS = {
